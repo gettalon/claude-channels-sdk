@@ -10,6 +10,24 @@ Use this to connect any client (browser extension, mobile app, Slack bot, Discor
 npm install @gettalon/channels-sdk
 ```
 
+After install, run setup to configure Claude Code:
+
+```bash
+claude-channels setup
+```
+
+This will:
+- Add your channel as an MCP server in Claude Code settings
+- Install hook commands for selected events (with presets: minimal, chat, monitor, permissions, all)
+
+You can also run non-interactively:
+
+```bash
+claude-channels setup --name my-channel --entry ./server.js --preset all
+claude-channels setup --name my-channel --entry ./server.js --hooks PreToolUse,PostToolUse
+claude-channels remove   # clean up settings
+```
+
 ## Quick Start
 
 ```typescript

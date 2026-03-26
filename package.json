@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "description": "SDK for building Claude Code channels with bidirectional chat, permission relay, and all 23 hook events",
   "bin": {
-    "claude-hook": "./dist/hook-script.js"
+    "claude-hook": "./dist/hook-script.js",
+    "claude-channels": "./dist/setup.js"
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -21,6 +22,8 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
+    "setup": "node dist/setup.js",
+    "postinstall": "node dist/postinstall.js",
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
