@@ -447,6 +447,18 @@ export async function createTelegramChannel(config) {
             return; // silently ignore
         if (policy.policy === "open")
             return; // shouldn't reach here
+        // Auto-admin: first user to message becomes admin + allowed (no existing users)
+        const hasAnyUsers = access.dm.allowed_users.length > 0 || access.dm.admin_users.length > 0;
+        if (!hasAnyUsers) {
+            access.dm.allowed_users.push(userId);
+            access.dm.admin_users.push(userId);
+            access.group.allowed_users.push(userId);
+            access.group.admin_users.push(userId);
+            await saveAccess(accessPath, access);
+            process.stderr.write(`[telegram] Auto-approved first user as admin: ${username} (${userId})\n`);
+            await ctx.reply(`<b>Welcome!</b>\n\nYou're the first user — auto-approved as admin.\nSend any message to start chatting.`, { parse_mode: "HTML" });
+            return;
+        }
         // Check if already has a pending pairing
         const existing = Object.values(access.pending_pairings).find((p) => p.user_id === userId);
         if (existing) {
@@ -878,7 +890,16 @@ export async function createTelegramChannel(config) {
             case "telegram_poll": {
                 const chatId = args.chat_id;
                 const question = args.question;
-                const options = args.options.map((o) => ({ text: o }));
+                let rawOptions = args.options;
+                if (typeof rawOptions === "string") {
+                    try {
+                        rawOptions = JSON.parse(rawOptions);
+                    }
+                    catch {
+                        rawOptions = [rawOptions];
+                    }
+                }
+                const options = rawOptions.map((o) => ({ text: o }));
                 const allowMultiple = args.allow_multiple ?? false;
                 const isAnonymous = args.is_anonymous ?? true;
                 const msg = await bot.api.sendPoll(chatId, question, options, {
