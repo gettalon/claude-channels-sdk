@@ -1,6 +1,6 @@
 {
   "name": "@gettalon/channels-sdk",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "SDK for building Claude Code channels with bidirectional chat, permission relay, and all 23 hook events",
   "bin": {
     "claude-hook": "./dist/hook-script.js",
@@ -88,15 +88,33 @@
     "botbuilder": "^4.0.0"
   },
   "peerDependenciesMeta": {
-    "grammy": { "optional": true },
-    "discord.js": { "optional": true },
-    "@slack/bolt": { "optional": true },
-    "@whiskeysockets/baileys": { "optional": true },
-    "matrix-js-sdk": { "optional": true },
-    "irc-framework": { "optional": true },
-    "@line/bot-sdk": { "optional": true },
-    "@larksuiteoapi/node-sdk": { "optional": true },
-    "botbuilder": { "optional": true }
+    "grammy": {
+      "optional": true
+    },
+    "discord.js": {
+      "optional": true
+    },
+    "@slack/bolt": {
+      "optional": true
+    },
+    "@whiskeysockets/baileys": {
+      "optional": true
+    },
+    "matrix-js-sdk": {
+      "optional": true
+    },
+    "irc-framework": {
+      "optional": true
+    },
+    "@line/bot-sdk": {
+      "optional": true
+    },
+    "@larksuiteoapi/node-sdk": {
+      "optional": true
+    },
+    "botbuilder": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
