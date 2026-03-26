@@ -17,6 +17,50 @@
     "./types": {
       "types": "./dist/types.d.ts",
       "import": "./dist/types.js"
+    },
+    "./channels": {
+      "types": "./dist/channels/index.d.ts",
+      "import": "./dist/channels/index.js"
+    },
+    "./telegram": {
+      "types": "./dist/channels/telegram.d.ts",
+      "import": "./dist/channels/telegram.js"
+    },
+    "./discord": {
+      "types": "./dist/channels/discord.d.ts",
+      "import": "./dist/channels/discord.js"
+    },
+    "./slack": {
+      "types": "./dist/channels/slack.d.ts",
+      "import": "./dist/channels/slack.js"
+    },
+    "./whatsapp": {
+      "types": "./dist/channels/whatsapp.d.ts",
+      "import": "./dist/channels/whatsapp.js"
+    },
+    "./matrix": {
+      "types": "./dist/channels/matrix.d.ts",
+      "import": "./dist/channels/matrix.js"
+    },
+    "./signal": {
+      "types": "./dist/channels/signal.d.ts",
+      "import": "./dist/channels/signal.js"
+    },
+    "./irc": {
+      "types": "./dist/channels/irc.d.ts",
+      "import": "./dist/channels/irc.js"
+    },
+    "./line": {
+      "types": "./dist/channels/line.d.ts",
+      "import": "./dist/channels/line.js"
+    },
+    "./feishu": {
+      "types": "./dist/channels/feishu.d.ts",
+      "import": "./dist/channels/feishu.js"
+    },
+    "./msteams": {
+      "types": "./dist/channels/msteams.d.ts",
+      "import": "./dist/channels/msteams.js"
     }
   },
   "scripts": {
@@ -29,6 +73,28 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.27.1",
     "zod": "^4.3.6"
+  },
+  "peerDependencies": {
+    "grammy": "^1.0.0",
+    "discord.js": "^14.0.0",
+    "@slack/bolt": "^3.0.0",
+    "@whiskeysockets/baileys": "^6.0.0",
+    "matrix-js-sdk": "^30.0.0",
+    "irc-framework": "^4.0.0",
+    "@line/bot-sdk": "^9.0.0",
+    "@larksuiteoapi/node-sdk": "^1.0.0",
+    "botbuilder": "^4.0.0"
+  },
+  "peerDependenciesMeta": {
+    "grammy": { "optional": true },
+    "discord.js": { "optional": true },
+    "@slack/bolt": { "optional": true },
+    "@whiskeysockets/baileys": { "optional": true },
+    "matrix-js-sdk": { "optional": true },
+    "irc-framework": { "optional": true },
+    "@line/bot-sdk": { "optional": true },
+    "@larksuiteoapi/node-sdk": { "optional": true },
+    "botbuilder": { "optional": true }
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
