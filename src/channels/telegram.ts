@@ -1,26 +1,26 @@
 /**
  * Telegram Channel Adapter
  *
- * Uses grammy for bot polling. Features:
+ * Uses direct Telegram Bot API HTTP calls with a local webhook server.
+ * Features:
+ * - No grammy dependency or framework abstraction
+ * - Webhook mode with optional automatic setWebhook/deleteWebhook
  * - Pairing flow: code challenge + /approve for unknown senders
  * - Access control: allowlist, admin users, DM/group policies
- * - Markdown->HTML conversion, message chunking (4096 limit) with ⏬ markers
+ * - Markdown->HTML conversion, message chunking (4096 limit) with continuation markers
  * - Inline keyboard permission prompts (Allow/Deny)
  * - Typing indicators while processing
  * - Streaming status: live-updating message showing tool execution
- * - Group chat: mention detection, sender labels
- * - Bot commands: /start, /help, /status, /stop, /new
- * - Message types: text, photo, document, voice, sticker, location, contact, forward, reply-to
- * - File download: photos and documents saved to disk
- * - Rate limiting: per-chat cooldown
+ * - Bot commands: /start, /help, /status, /stop, /new, /streaming
+ * - Message types: text, photo, document, voice, sticker, animation, location, contact
+ * - File download: photos/documents/voice saved to disk
+ * - Voice transcription: Groq Whisper API with local whisper CLI fallback
  * - Extra tools: telegram_send, telegram_react, telegram_edit, telegram_poll, telegram_download
  * - Persistent access.json storage
  */
 
 import { ChannelServer } from "../channel-server.js";
-import type { ChannelServerOptions, ChannelPermissionRequest } from "../types.js";
-
-// ─── Config ──────────────────────────────────────────────────────────────────
+import type { ChannelPermissionRequest, ChannelServerOptions } from "../types.js";
 
 export type PairingMode = "pairing" | "open" | "disabled";
 
@@ -43,11 +43,129 @@ export interface TelegramConfig {
   downloadPath?: string;
   groupTrigger?: "mention" | "always" | "never";
   streamingUpdates?: boolean;
+  webhookPort?: number;
+  webhookHost?: string;
+  webhookPath?: string;
+  webhookUrl?: string;
+  webhookSecret?: string;
+  groqApiKey?: string;
+  whisperModel?: string;
+}
+
+type TelegramChatType = "private" | "group" | "supergroup" | "channel";
+
+type TelegramInlineKeyboardButton = {
+  text: string;
+  callback_data?: string;
+  web_app?: { url: string };
+};
+
+type TelegramInlineKeyboard = {
+  inline_keyboard: TelegramInlineKeyboardButton[][];
+};
+
+type TelegramReplyOptions = {
+  parseMode?: "HTML";
+  replyTo?: number;
+  threadId?: number;
+  replyMarkup?: TelegramInlineKeyboard;
+};
+
+type StreamingStatus = {
+  messageId: number;
+  tools: string[];
+  lastUpdate: number;
+};
+
+type IncomingInfo = {
+  chatId: string;
+  userId: string;
+  username: string;
+  isGroup: boolean;
+  chatType: TelegramChatType;
+};
+
+type TelegramUser = {
+  id?: number;
+  is_bot?: boolean;
+  username?: string;
+  first_name?: string;
+  last_name?: string;
+};
+
+type TelegramMessage = {
+  message_id?: number;
+  message_thread_id?: number;
+  date?: number;
+  text?: string;
+  caption?: string;
+  chat?: {
+    id?: number;
+    type?: TelegramChatType;
+    title?: string;
+  };
+  from?: TelegramUser;
+  reply_to_message?: TelegramMessage;
+  forward_origin?: {
+    type?: string;
+    sender_user?: TelegramUser;
+    chat?: { title?: string };
+    sender_user_name?: string;
+  };
+  forward_from?: TelegramUser;
+  forward_from_chat?: { title?: string };
+  photo?: Array<{ file_id?: string }>;
+  document?: { file_id?: string; file_name?: string };
+  voice?: { file_id?: string; duration?: number };
+  audio?: { file_id?: string; duration?: number };
+  sticker?: { emoji?: string; set_name?: string };
+  animation?: { file_id?: string };
+  location?: { latitude?: number; longitude?: number };
+  contact?: { first_name?: string; last_name?: string; phone_number?: string };
+};
+
+type TelegramCallbackQuery = {
+  id?: string;
+  data?: string;
+  from?: TelegramUser;
+  message?: TelegramMessage & { text?: string };
+};
+
+type TelegramUpdate = {
+  update_id?: number;
+  message?: TelegramMessage;
+  callback_query?: TelegramCallbackQuery;
+};
+
+type TelegramApiEnvelope<T> = {
+  ok?: boolean;
+  result?: T;
+  description?: string;
+  error_code?: number;
+  parameters?: {
+    retry_after?: number;
+  };
+};
+
+class TelegramApiError extends Error {
+  status: number;
+  errorCode?: number;
+  retryAfter?: number;
+
+  constructor(method: string, status: number, payload?: TelegramApiEnvelope<unknown> | null) {
+    super(payload?.description ?? `${method} failed with status ${status}`);
+    this.name = "TelegramApiError";
+    this.status = status;
+    this.errorCode = payload?.error_code;
+    this.retryAfter = payload?.parameters?.retry_after;
+  }
 }
 
 export function parseConfig(): TelegramConfig {
   const botToken = process.env.TELEGRAM_BOT_TOKEN ?? "";
-  if (!botToken) throw new Error("TELEGRAM_BOT_TOKEN is required");
+  if (!botToken) {
+    throw new Error("TELEGRAM_BOT_TOKEN is required");
+  }
 
   const allowedChats = process.env.TELEGRAM_ALLOWED_CHATS
     ?.split(",")
@@ -58,11 +176,30 @@ export function parseConfig(): TelegramConfig {
   const downloadPath = process.env.TELEGRAM_DOWNLOAD_PATH;
   const groupTrigger = (process.env.TELEGRAM_GROUP_TRIGGER as TelegramConfig["groupTrigger"]) ?? "mention";
   const streamingUpdates = process.env.TELEGRAM_STREAMING !== "false";
+  const webhookPort = parseInt(process.env.TELEGRAM_WEBHOOK_PORT ?? "3000", 10);
+  const webhookHost = process.env.TELEGRAM_WEBHOOK_HOST ?? "0.0.0.0";
+  const webhookPath = process.env.TELEGRAM_WEBHOOK_PATH ?? "/webhook";
+  const webhookUrl = process.env.TELEGRAM_WEBHOOK_URL;
+  const webhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
+  const groqApiKey = process.env.TELEGRAM_GROQ_API_KEY ?? process.env.GROQ_API_KEY;
+  const whisperModel = process.env.TELEGRAM_WHISPER_MODEL ?? "base";
 
-  return { botToken, allowedChats, accessPath, downloadPath, groupTrigger, streamingUpdates };
+  return {
+    botToken,
+    allowedChats,
+    accessPath,
+    downloadPath,
+    groupTrigger,
+    streamingUpdates,
+    webhookPort,
+    webhookHost,
+    webhookPath,
+    webhookUrl,
+    webhookSecret,
+    groqApiKey,
+    whisperModel,
+  };
 }
-
-// ─── Access Store ───────────────────────────────────────────────────────────
 
 function defaultAccess(): TelegramAccess {
   return {
@@ -76,7 +213,7 @@ async function loadAccess(path: string): Promise<TelegramAccess> {
   const { readFileSync } = await import("node:fs");
   try {
     const raw = readFileSync(path, "utf-8");
-    const data = JSON.parse(raw);
+    const data = JSON.parse(raw) as Partial<TelegramAccess>;
     return { ...defaultAccess(), ...data };
   } catch {
     return defaultAccess();
@@ -94,54 +231,49 @@ function generatePairingCode(): string {
   return Math.random().toString(36).slice(2, 8).toUpperCase();
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
 const MAX_MSG_LEN = 4096;
 
 function chunkText(text: string, limit: number): string[] {
-  if (text.length <= limit) return [text];
+  if (text.length <= limit) {
+    return [text];
+  }
+
   const chunks: string[] = [];
   let remaining = text;
-  // Reserve space for continuation marker
   const effectiveLimit = limit - 4;
+
   while (remaining.length > 0) {
     if (remaining.length <= limit) {
       chunks.push(remaining);
       break;
     }
-    // Try to split at 50%+ boundary on newlines, then spaces
+
     let splitAt = remaining.lastIndexOf("\n", effectiveLimit);
-    if (splitAt < effectiveLimit * 0.5) splitAt = remaining.lastIndexOf(" ", effectiveLimit);
-    if (splitAt <= 0) splitAt = effectiveLimit;
-    chunks.push(remaining.slice(0, splitAt) + "\n\u23ec");
+    if (splitAt < effectiveLimit * 0.5) {
+      splitAt = remaining.lastIndexOf(" ", effectiveLimit);
+    }
+    if (splitAt <= 0) {
+      splitAt = effectiveLimit;
+    }
+
+    chunks.push(`${remaining.slice(0, splitAt)}\n\u23ec`);
     remaining = remaining.slice(splitAt).replace(/^\n/, "");
   }
+
   return chunks;
 }
 
-/**
- * Minimal Markdown to Telegram HTML conversion.
- * Handles bold, italic, code, pre blocks, links, strikethrough, lists.
- */
 function mdToHtml(md: string): string {
   let html = md;
-  // Code blocks first (```lang\n...\n```)
   html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (_m, _lang, code) => `<pre>${escapeHtml(code.trimEnd())}</pre>`);
-  // Inline code
   html = html.replace(/`([^`]+)`/g, (_m, code) => `<code>${escapeHtml(code)}</code>`);
-  // Bold **text** or __text__
   html = html.replace(/\*\*(.+?)\*\*/g, "<b>$1</b>");
   html = html.replace(/__(.+?)__/g, "<b>$1</b>");
-  // Strikethrough ~~text~~
   html = html.replace(/~~(.+?)~~/g, "<s>$1</s>");
-  // Italic *text* or _text_
   html = html.replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g, "<i>$1</i>");
   html = html.replace(/(?<!_)_(?!_)(.+?)(?<!_)_(?!_)/g, "<i>$1</i>");
-  // Links [text](url)
   html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
-  // Headers # text -> bold
   html = html.replace(/^#{1,6}\s+(.+)$/gm, "<b>$1</b>");
-  // Bullet lists
   html = html.replace(/^[-*]\s+/gm, "\u2022 ");
   return html;
 }
@@ -150,11 +282,48 @@ function escapeHtml(text: string): string {
   return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-async function sleep(ms: number): Promise<void> {
-  return new Promise((r) => setTimeout(r, ms));
+function sanitizeFilename(text: string): string {
+  return text.replace(/[^a-zA-Z0-9._-]/g, "_");
 }
 
-// ─── Extra Tools ─────────────────────────────────────────────────────────────
+function normalizeWebhookPath(path: string | undefined): string {
+  if (!path || path === "/") {
+    return "/webhook";
+  }
+  return path.startsWith("/") ? path : `/${path}`;
+}
+
+function constantTimeEquals(a: string, b: string): boolean {
+  if (a.length !== b.length) {
+    return false;
+  }
+  let result = 0;
+  for (let index = 0; index < a.length; index += 1) {
+    result |= a.charCodeAt(index) ^ b.charCodeAt(index);
+  }
+  return result === 0;
+}
+
+function isImagePath(path: string): boolean {
+  return /\.(png|jpe?g|gif|webp|bmp)$/i.test(path);
+}
+
+function mimeTypeForPath(path: string): string {
+  if (/\.png$/i.test(path)) return "image/png";
+  if (/\.gif$/i.test(path)) return "image/gif";
+  if (/\.webp$/i.test(path)) return "image/webp";
+  if (/\.jpg$/i.test(path) || /\.jpeg$/i.test(path)) return "image/jpeg";
+  if (/\.ogg$/i.test(path)) return "audio/ogg";
+  return "application/octet-stream";
+}
+
+function encodeBase64(buffer: Uint8Array): string {
+  return Buffer.from(buffer).toString("base64");
+}
+
+async function sleep(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 const EXTRA_TOOLS: ChannelServerOptions["extraTools"] = [
   {
@@ -236,66 +405,414 @@ const EXTRA_TOOLS: ChannelServerOptions["extraTools"] = [
   },
 ];
 
-// ─── Channel Factory ─────────────────────────────────────────────────────────
-
 export async function createTelegramChannel(
   config?: Partial<TelegramConfig>,
 ): Promise<{ channel: ChannelServer; cleanup: () => void }> {
-  // @ts-ignore - grammy is a dependency
-  const { Bot, InlineKeyboard, InputFile } = await import("grammy") as any;
-  const { join } = await import("node:path");
-  const { homedir } = await import("node:os");
+  const http = await import("node:http");
+  const { join, basename } = await import("node:path");
+  const { homedir, tmpdir } = await import("node:os");
+  const { mkdirSync } = await import("node:fs");
+  const { readFile, writeFile, unlink } = await import("node:fs/promises");
+  const { execFile } = await import("node:child_process");
+  const { promisify } = await import("node:util");
 
-  const { mkdirSync: mkdirSyncFs, writeFileSync: writeFileSyncFs } = await import("node:fs");
-  const { tmpdir } = await import("node:os");
-  const { createWriteStream } = await import("node:fs");
-  const { pipeline } = await import("node:stream/promises");
+  const execFileAsync = promisify(execFile);
 
   const cfg = { ...parseConfig(), ...config };
-  if (!cfg.botToken) throw new Error("TELEGRAM_BOT_TOKEN is required");
+  if (!cfg.botToken) {
+    throw new Error("TELEGRAM_BOT_TOKEN is required");
+  }
 
   const accessPath = cfg.accessPath ?? join(homedir(), ".claude", "channels", "telegram", "access.json");
   const downloadDir = cfg.downloadPath ?? join(tmpdir(), "talon-telegram-downloads");
-  mkdirSyncFs(downloadDir, { recursive: true });
+  const webhookPort = cfg.webhookPort ?? 3000;
+  const webhookHost = cfg.webhookHost ?? "0.0.0.0";
+  const webhookPath = normalizeWebhookPath(cfg.webhookPath);
+  const webhookSecret = cfg.webhookSecret;
+
+  mkdirSync(downloadDir, { recursive: true });
 
   let access = await loadAccess(accessPath);
 
-  // Legacy allowedChats → migrate to access.dm.allowed_users
   if (cfg.allowedChats && cfg.allowedChats.length > 0) {
     for (const id of cfg.allowedChats) {
-      if (!access.dm.allowed_users.includes(id)) access.dm.allowed_users.push(id);
+      if (!access.dm.allowed_users.includes(id)) {
+        access.dm.allowed_users.push(id);
+      }
     }
     access.dm.policy = "pairing";
     await saveAccess(accessPath, access);
   }
 
-  const bot = new Bot(cfg.botToken);
   let botUsername = "";
+  let shuttingDown = false;
+  let webhookRegistered = false;
 
-  // Pending permission prompts: request_id -> { chatId }
   const pendingPermissions = new Map<string, { chatId: string }>();
-  // Active chats that have sent messages (for permission prompts when no allowlist)
   const activeChats = new Set<string>();
-  // Typing indicator intervals per chat
   const typingIntervals = new Map<string, ReturnType<typeof setInterval>>();
-  // Streaming status: chat_id -> { messageId, tools }
-  const streamingStatus = new Map<string, { messageId: number; tools: string[]; lastUpdate: number }>();
-  // Per-chat streaming toggle (default from config)
+  const streamingStatus = new Map<string, StreamingStatus>();
   const streamingEnabled = new Map<string, boolean>();
 
   function isStreamingEnabled(chatId: string): boolean {
     return streamingEnabled.get(chatId) ?? (cfg.streamingUpdates !== false);
   }
 
-  // ─── Access check ───────────────────────────────────────────────────────
+  function apiUrl(method: string): string {
+    return `https://api.telegram.org/bot${cfg.botToken}/${method}`;
+  }
 
-  function isAllowed(userId: string, chatType: "private" | "group" | "supergroup" | "channel"): boolean {
+  function fileUrl(filePath: string): string {
+    return `https://api.telegram.org/file/bot${cfg.botToken}/${filePath}`;
+  }
+
+  async function parseEnvelope<T>(response: Response): Promise<TelegramApiEnvelope<T> | null> {
+    try {
+      return await response.json() as TelegramApiEnvelope<T>;
+    } catch {
+      return null;
+    }
+  }
+
+  async function requestJson<T>(method: string, body: Record<string, unknown>, maxRetries = 3): Promise<T> {
+    for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+      const response = await fetch(apiUrl(method), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const payload = await parseEnvelope<T>(response);
+      const ok = response.ok && payload?.ok !== false;
+      if (ok) {
+        return payload?.result as T;
+      }
+
+      const retryAfter = payload?.parameters?.retry_after ?? Number(response.headers.get("retry-after") ?? "0");
+      if ((response.status === 429 || payload?.error_code === 429) && attempt < maxRetries) {
+        await sleep((retryAfter > 0 ? retryAfter : 5) * 1000);
+        continue;
+      }
+
+      throw new TelegramApiError(method, response.status, payload);
+    }
+
+    throw new Error(`${method} failed`);
+  }
+
+  async function requestMultipart<T>(method: string, buildForm: () => FormData, maxRetries = 1): Promise<T> {
+    for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+      const response = await fetch(apiUrl(method), {
+        method: "POST",
+        body: buildForm(),
+      });
+      const payload = await parseEnvelope<T>(response);
+      const ok = response.ok && payload?.ok !== false;
+      if (ok) {
+        return payload?.result as T;
+      }
+
+      const retryAfter = payload?.parameters?.retry_after ?? Number(response.headers.get("retry-after") ?? "0");
+      if ((response.status === 429 || payload?.error_code === 429) && attempt < maxRetries) {
+        await sleep((retryAfter > 0 ? retryAfter : 5) * 1000);
+        continue;
+      }
+
+      throw new TelegramApiError(method, response.status, payload);
+    }
+
+    throw new Error(`${method} failed`);
+  }
+
+  async function sendMessage(chatId: string, text: string, opts: TelegramReplyOptions = {}): Promise<{ message_id?: number }> {
+    const body: Record<string, unknown> = {
+      chat_id: chatId,
+      text,
+    };
+    if (opts.parseMode === "HTML") {
+      body.parse_mode = "HTML";
+    }
+    if (opts.replyTo !== undefined) {
+      body.reply_parameters = { message_id: opts.replyTo };
+    }
+    if (opts.threadId !== undefined) {
+      body.message_thread_id = opts.threadId;
+    }
+    if (opts.replyMarkup) {
+      body.reply_markup = opts.replyMarkup;
+    }
+    return requestJson("sendMessage", body);
+  }
+
+  async function editMessageText(
+    chatId: string,
+    messageId: number,
+    text: string,
+    opts: Pick<TelegramReplyOptions, "parseMode" | "replyMarkup"> = {},
+  ): Promise<void> {
+    const body: Record<string, unknown> = {
+      chat_id: chatId,
+      message_id: messageId,
+      text,
+    };
+    if (opts.parseMode === "HTML") {
+      body.parse_mode = "HTML";
+    }
+    if (opts.replyMarkup) {
+      body.reply_markup = opts.replyMarkup;
+    }
+    await requestJson("editMessageText", body, 1);
+  }
+
+  async function deleteMessage(chatId: string, messageId: number): Promise<void> {
+    await requestJson("deleteMessage", { chat_id: chatId, message_id: messageId }, 1);
+  }
+
+  async function answerCallbackQuery(callbackQueryId: string, text?: string): Promise<void> {
+    const body: Record<string, unknown> = { callback_query_id: callbackQueryId };
+    if (text) {
+      body.text = text;
+    }
+    await requestJson("answerCallbackQuery", body, 1);
+  }
+
+  async function setMessageReaction(chatId: string, messageId: number, emoji?: string): Promise<void> {
+    const reaction = emoji ? [{ type: "emoji", emoji }] : [];
+    await requestJson("setMessageReaction", {
+      chat_id: chatId,
+      message_id: messageId,
+      reaction,
+    }, 1);
+  }
+
+  async function sendChatAction(chatId: string): Promise<void> {
+    await requestJson("sendChatAction", { chat_id: chatId, action: "typing" }, 1);
+  }
+
+  async function setMyCommands(commands: Array<{ command: string; description: string }>): Promise<void> {
+    await requestJson("setMyCommands", { commands }, 1);
+  }
+
+  async function getMe(): Promise<{ username?: string }> {
+    return requestJson("getMe", {}, 1);
+  }
+
+  async function setWebhook(url: string, secret?: string): Promise<void> {
+    const body: Record<string, unknown> = {
+      url,
+      allowed_updates: ["message", "callback_query"],
+      drop_pending_updates: true,
+    };
+    if (secret) {
+      body.secret_token = secret;
+    }
+    await requestJson("setWebhook", body, 1);
+  }
+
+  async function deleteWebhook(): Promise<void> {
+    await requestJson("deleteWebhook", { drop_pending_updates: true }, 1);
+  }
+
+  async function getFile(fileId: string): Promise<{ file_path?: string }> {
+    return requestJson("getFile", { file_id: fileId }, 1);
+  }
+
+  async function sendInlineKeyboard(
+    chatId: string,
+    text: string,
+    buttons: TelegramInlineKeyboardButton[][],
+    opts: TelegramReplyOptions = {},
+  ): Promise<number | undefined> {
+    const result = await sendMessage(chatId, text, {
+      ...opts,
+      replyMarkup: { inline_keyboard: buttons },
+    });
+    return result.message_id;
+  }
+
+  async function sendPhoto(chatId: string, filePath: string, caption?: string, opts: TelegramReplyOptions = {}): Promise<void> {
+    const data = await readFile(filePath);
+    await requestMultipart("sendPhoto", () => {
+      const form = new FormData();
+      form.append("chat_id", chatId);
+      form.append("photo", new Blob([data], { type: mimeTypeForPath(filePath) }), basename(filePath));
+      if (caption) {
+        form.append("caption", caption);
+      }
+      if (opts.parseMode === "HTML") {
+        form.append("parse_mode", "HTML");
+      }
+      if (opts.replyTo !== undefined) {
+        form.append("reply_parameters", JSON.stringify({ message_id: opts.replyTo }));
+      }
+      if (opts.threadId !== undefined) {
+        form.append("message_thread_id", String(opts.threadId));
+      }
+      if (opts.replyMarkup) {
+        form.append("reply_markup", JSON.stringify(opts.replyMarkup));
+      }
+      return form;
+    });
+  }
+
+  async function sendDocument(chatId: string, filePath: string, caption?: string, opts: TelegramReplyOptions = {}): Promise<void> {
+    const data = await readFile(filePath);
+    await requestMultipart("sendDocument", () => {
+      const form = new FormData();
+      form.append("chat_id", chatId);
+      form.append("document", new Blob([data], { type: mimeTypeForPath(filePath) }), basename(filePath));
+      if (caption) {
+        form.append("caption", caption);
+      }
+      if (opts.parseMode === "HTML") {
+        form.append("parse_mode", "HTML");
+      }
+      if (opts.replyTo !== undefined) {
+        form.append("reply_parameters", JSON.stringify({ message_id: opts.replyTo }));
+      }
+      if (opts.threadId !== undefined) {
+        form.append("message_thread_id", String(opts.threadId));
+      }
+      if (opts.replyMarkup) {
+        form.append("reply_markup", JSON.stringify(opts.replyMarkup));
+      }
+      return form;
+    });
+  }
+
+  async function sendOutputFile(chatId: string, filePath: string, opts: TelegramReplyOptions = {}): Promise<void> {
+    if (isImagePath(filePath)) {
+      await sendPhoto(chatId, filePath, undefined, opts);
+      return;
+    }
+    await sendDocument(chatId, filePath, undefined, opts);
+  }
+
+  async function sendPoll(
+    chatId: string,
+    question: string,
+    options: string[],
+    allowMultiple: boolean,
+    isAnonymous: boolean,
+  ): Promise<{ message_id?: number }> {
+    return requestJson("sendPoll", {
+      chat_id: chatId,
+      question,
+      options,
+      allows_multiple_answers: allowMultiple,
+      is_anonymous: isAnonymous,
+    });
+  }
+
+  async function downloadFile(fileId: string, filename?: string): Promise<string> {
+    const file = await getFile(fileId);
+    if (!file.file_path) {
+      throw new Error("No file_path from Telegram");
+    }
+
+    const response = await fetch(fileUrl(file.file_path));
+    if (!response.ok) {
+      throw new Error(`Download failed: ${response.status}`);
+    }
+
+    const data = new Uint8Array(await response.arrayBuffer());
+    const ext = file.file_path.split(".").pop() ?? "";
+    const outName = filename ?? `${sanitizeFilename(fileId.slice(0, 12))}${ext ? `.${sanitizeFilename(ext)}` : ""}`;
+    const outPath = join(downloadDir, sanitizeFilename(outName));
+    await writeFile(outPath, data);
+    return outPath;
+  }
+
+  async function downloadPhotoAsDataUri(fileId: string): Promise<string | undefined> {
+    const file = await getFile(fileId);
+    if (!file.file_path) {
+      return undefined;
+    }
+
+    const response = await fetch(fileUrl(file.file_path));
+    if (!response.ok) {
+      return undefined;
+    }
+
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    if (bytes.byteLength > 512 * 1024) {
+      return undefined;
+    }
+    const mimeType = mimeTypeForPath(file.file_path);
+    return `data:${mimeType};base64,${encodeBase64(bytes)}`;
+  }
+
+  async function transcribeVoiceGroq(filePath: string): Promise<string | undefined> {
+    if (!cfg.groqApiKey) {
+      return undefined;
+    }
+
+    try {
+      const data = await readFile(filePath);
+      const form = new FormData();
+      form.append("model", "whisper-large-v3");
+      form.append("file", new Blob([data], { type: mimeTypeForPath(filePath) }), basename(filePath));
+
+      const response = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${cfg.groqApiKey}`,
+        },
+        body: form,
+      });
+
+      if (!response.ok) {
+        return undefined;
+      }
+
+      const payload = await response.json() as { text?: string };
+      return payload.text?.trim() || undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  async function transcribeVoiceLocal(filePath: string): Promise<string | undefined> {
+    const model = cfg.whisperModel ?? "base";
+    const outputDir = downloadDir;
+    const stem = basename(filePath).replace(/\.[^.]+$/, "");
+    const txtPath = join(outputDir, `${stem}.txt`);
+
+    try {
+      await execFileAsync("whisper", [
+        filePath,
+        "--model",
+        model,
+        "--output_format",
+        "txt",
+        "--output_dir",
+        outputDir,
+      ]);
+      const text = (await readFile(txtPath, "utf-8")).trim();
+      await unlink(txtPath).catch(() => {});
+      return text || undefined;
+    } catch {
+      await unlink(txtPath).catch(() => {});
+      return undefined;
+    }
+  }
+
+  async function transcribeVoice(filePath: string): Promise<string | undefined> {
+    const groqText = await transcribeVoiceGroq(filePath);
+    if (groqText) {
+      return groqText;
+    }
+    return transcribeVoiceLocal(filePath);
+  }
+
+  function isAllowed(userId: string, chatType: TelegramChatType): boolean {
     const isGroup = chatType !== "private";
     const policy = isGroup ? access.group : access.dm;
-
-    if (policy.policy === "open") return true;
-    if (policy.policy === "disabled") return false;
-    // "pairing" mode: check allowlist + admins
+    if (policy.policy === "open") {
+      return true;
+    }
+    if (policy.policy === "disabled") {
+      return false;
+    }
     return policy.allowed_users.includes(userId) || policy.admin_users.includes(userId);
   }
 
@@ -303,11 +820,13 @@ export async function createTelegramChannel(
     return access.dm.admin_users.includes(userId) || access.group.admin_users.includes(userId);
   }
 
-  // ─── Typing indicator ──────────────────────────────────────────────────
-
   function startTyping(chatId: string): void {
-    if (typingIntervals.has(chatId)) return;
-    const send = () => { bot.api.sendChatAction(chatId, "typing").catch(() => {}); };
+    if (typingIntervals.has(chatId)) {
+      return;
+    }
+    const send = (): void => {
+      void sendChatAction(chatId).catch(() => {});
+    };
     send();
     typingIntervals.set(chatId, setInterval(send, 4000));
   }
@@ -320,72 +839,54 @@ export async function createTelegramChannel(
     }
   }
 
-  // ─── File download ─────────────────────────────────────────────────────
-
-  async function downloadFile(fileId: string, filename?: string): Promise<string> {
-    const file = await bot.api.getFile(fileId);
-    const filePath = file.file_path;
-    if (!filePath) throw new Error("No file_path from Telegram");
-
-    const url = `https://api.telegram.org/file/bot${cfg.botToken}/${filePath}`;
-    const ext = filePath.split(".").pop() ?? "";
-    const outName = filename ?? `${fileId.slice(0, 12)}.${ext}`;
-    const outPath = join(downloadDir, outName.replace(/[^a-zA-Z0-9._-]/g, "_"));
-
-    const resp = await fetch(url);
-    if (!resp.ok || !resp.body) throw new Error(`Download failed: ${resp.status}`);
-
-    const ws = createWriteStream(outPath);
-    // @ts-ignore - ReadableStream to NodeJS.WritableStream
-    await pipeline(resp.body as any, ws);
-    return outPath;
-  }
-
-  // ─── Streaming status updates ──────────────────────────────────────────
-
   async function updateStreamingStatus(chatId: string, toolName: string): Promise<void> {
-    if (!isStreamingEnabled(chatId)) return;
-
-    const status = streamingStatus.get(chatId);
-    const now = Date.now();
-
-    if (status) {
-      status.tools.push(toolName);
-      // Debounce: only update every 1.5s
-      if (now - status.lastUpdate < 1500) return;
-      status.lastUpdate = now;
-
-      const toolList = status.tools.slice(-5).map((t) => `\u2022 ${t}`).join("\n");
-      const text = `\u2699\ufe0f <i>Working...</i>\n\n${toolList}`;
-      try {
-        await bot.api.editMessageText(chatId, status.messageId, text, { parse_mode: "HTML" });
-      } catch {}
-    } else {
-      // Send initial status message
-      try {
-        const msg = await bot.api.sendMessage(chatId, `\u2699\ufe0f <i>Working on: ${escapeHtml(toolName)}...</i>`, { parse_mode: "HTML" });
-        streamingStatus.set(chatId, { messageId: msg.message_id, tools: [toolName], lastUpdate: now });
-      } catch {}
+    if (!isStreamingEnabled(chatId)) {
+      return;
     }
+
+    const existing = streamingStatus.get(chatId);
+    const now = Date.now();
+    if (existing) {
+      existing.tools.push(toolName);
+      if (now - existing.lastUpdate < 1500) {
+        return;
+      }
+      existing.lastUpdate = now;
+      const toolList = existing.tools.slice(-5).map((item) => `\u2022 ${escapeHtml(item)}`).join("\n");
+      try {
+        await editMessageText(chatId, existing.messageId, `\u2699\ufe0f <i>Working...</i>\n\n${toolList}`, { parseMode: "HTML" });
+      } catch {}
+      return;
+    }
+
+    try {
+      const msg = await sendMessage(chatId, `\u2699\ufe0f <i>Working on: ${escapeHtml(toolName)}...</i>`, { parseMode: "HTML" });
+      if (msg.message_id !== undefined) {
+        streamingStatus.set(chatId, {
+          messageId: msg.message_id,
+          tools: [toolName],
+          lastUpdate: now,
+        });
+      }
+    } catch {}
   }
 
   async function clearStreamingStatus(chatId: string): Promise<void> {
-    const status = streamingStatus.get(chatId);
-    if (status) {
-      try {
-        await bot.api.deleteMessage(chatId, status.messageId);
-      } catch {}
-      streamingStatus.delete(chatId);
+    const existing = streamingStatus.get(chatId);
+    if (!existing) {
+      return;
     }
+    try {
+      await deleteMessage(chatId, existing.messageId);
+    } catch {}
+    streamingStatus.delete(chatId);
   }
-
-  // ─── Channel server ────────────────────────────────────────────────────
 
   const channel = new ChannelServer({
     name: "telegram",
-    version: "1.0.0",
+    version: "1.1.0",
     instructions: [
-      "You are connected to Telegram via a bot. Messages arrive as channel notifications with chat_id in meta.",
+      "You are connected to Telegram via a bot webhook. Messages arrive as channel notifications with chat_id in meta.",
       "Use the reply tool to respond. For advanced features use telegram_send, telegram_react, telegram_edit, telegram_poll.",
       "Messages support HTML formatting. Keep messages under 4096 characters; longer content is auto-chunked.",
       "Permission requests appear as inline keyboard buttons in the chat. The user taps Allow or Deny.",
@@ -394,146 +895,40 @@ export async function createTelegramChannel(
     extraTools: EXTRA_TOOLS,
   });
 
-  // ─── Bot commands ──────────────────────────────────────────────────────
+  async function sendTextResponse(chatId: string, text: string): Promise<void> {
+    const html = mdToHtml(text);
+    const chunks = chunkText(html, MAX_MSG_LEN);
 
-  bot.command("start", async (ctx: any) => {
-    const chatId = String(ctx.chat.id);
-    const userId = String(ctx.from?.id ?? "");
-    const username = ctx.from?.username ?? ctx.from?.first_name ?? "unknown";
+    for (let index = 0; index < chunks.length; index += 1) {
+      if (index > 0) {
+        await sleep(300);
+      }
 
-    if (!isAllowed(userId, ctx.chat.type)) {
-      await handlePairing(ctx, userId, username, chatId);
+      try {
+        await sendMessage(chatId, chunks[index], { parseMode: "HTML" });
+      } catch (error) {
+        const err = error as TelegramApiError;
+        if (index === 0 && (err.errorCode === 400 || err.status === 400)) {
+          try {
+            await sendMessage(chatId, text);
+          } catch (plainError: any) {
+            process.stderr.write(`[telegram] Failed to send to ${chatId}: ${plainError.message}\n`);
+          }
+          return;
+        }
+        process.stderr.write(`[telegram] Send error: ${err.message}\n`);
+        return;
+      }
+    }
+  }
+
+  async function handlePairing(message: TelegramMessage, userId: string, username: string, chatId: string): Promise<void> {
+    const chatType = message.chat?.type ?? "private";
+    const policy = chatType === "private" ? access.dm : access.group;
+    if (policy.policy === "disabled" || policy.policy === "open") {
       return;
     }
 
-    const keyboard = new InlineKeyboard()
-      .text("Status", "cmd:status").text("Help", "cmd:help").row()
-      .text("Stop", "cmd:stop").text("New Chat", "cmd:new");
-
-    await ctx.reply(
-      `<b>Talon Channels</b>\n\nConnected to Claude Code via Telegram.\nSend any message to start chatting.`,
-      { parse_mode: "HTML", reply_markup: keyboard },
-    );
-  });
-
-  bot.command("help", async (ctx: any) => {
-    await ctx.reply(
-      [
-        "<b>Commands</b>",
-        "",
-        "/start \u2014 Welcome message",
-        "/help \u2014 This help",
-        "/status \u2014 Connection status",
-        "/stop \u2014 Interrupt current task",
-        "/new \u2014 Clear conversation context",
-        "/streaming \u2014 Toggle live tool status updates",
-        "/approve &lt;code&gt; \u2014 Approve a pairing request (admin)",
-      ].join("\n"),
-      { parse_mode: "HTML" },
-    );
-  });
-
-  bot.command("status", async (ctx: any) => {
-    const userId = String(ctx.from?.id ?? "");
-    const chatId = String(ctx.chat.id);
-    const isAdm = isAdmin(userId);
-    const policy = ctx.chat.type === "private" ? access.dm : access.group;
-    const pendingCount = Object.keys(access.pending_pairings).length;
-
-    await ctx.reply(
-      [
-        "<b>Status</b>",
-        "",
-        `<b>Chat:</b> ${chatId}`,
-        `<b>User:</b> ${userId}`,
-        `<b>Admin:</b> ${isAdm ? "Yes" : "No"}`,
-        `<b>Policy:</b> ${policy.policy}`,
-        `<b>Allowed users:</b> ${policy.allowed_users.length}`,
-        `<b>Pending pairings:</b> ${pendingCount}`,
-        `<b>Bot:</b> @${botUsername}`,
-      ].join("\n"),
-      { parse_mode: "HTML" },
-    );
-  });
-
-  bot.command("stop", async (ctx: any) => {
-    await ctx.reply("Stop signal sent.");
-    // Push as a message so Claude sees it
-    await channel.pushMessage("/stop", {
-      chat_id: String(ctx.chat.id),
-      message_id: String(ctx.message.message_id),
-      user: ctx.from?.username ?? "user",
-    });
-  });
-
-  bot.command("new", async (ctx: any) => {
-    await ctx.reply("Conversation context cleared.");
-    await channel.pushMessage("/new — start fresh conversation", {
-      chat_id: String(ctx.chat.id),
-      message_id: String(ctx.message.message_id),
-      user: ctx.from?.username ?? "user",
-    });
-  });
-
-  bot.command("streaming", async (ctx: any) => {
-    const chatId = String(ctx.chat.id);
-    const current = isStreamingEnabled(chatId);
-    const next = !current;
-    streamingEnabled.set(chatId, next);
-    await ctx.reply(`Streaming status updates: <b>${next ? "ON" : "OFF"}</b>`, { parse_mode: "HTML" });
-  });
-
-  bot.command("approve", async (ctx: any) => {
-    const userId = String(ctx.from?.id ?? "");
-    if (!isAdmin(userId)) {
-      await ctx.reply("Only admins can approve pairing requests.");
-      return;
-    }
-
-    const code = ctx.match?.trim().toUpperCase();
-    if (!code) {
-      await ctx.reply("Usage: /approve <code>");
-      return;
-    }
-
-    // Find pending pairing with this code
-    const entry = Object.entries(access.pending_pairings).find(([, v]) => v.code === code);
-    if (!entry) {
-      await ctx.reply(`No pending pairing with code: ${code}`);
-      return;
-    }
-
-    const [pairingId, pairing] = entry;
-
-    // Add to allowlist
-    if (!access.dm.allowed_users.includes(pairing.user_id)) {
-      access.dm.allowed_users.push(pairing.user_id);
-    }
-    if (!access.group.allowed_users.includes(pairing.user_id)) {
-      access.group.allowed_users.push(pairing.user_id);
-    }
-    delete access.pending_pairings[pairingId];
-    await saveAccess(accessPath, access);
-
-    await ctx.reply(`Approved @${pairing.username} (${pairing.user_id})`);
-
-    // Notify the paired user
-    try {
-      await bot.api.sendMessage(pairing.chat_id, "You've been approved! Send any message to start chatting.");
-    } catch {
-      // User may have blocked the bot
-    }
-  });
-
-  // ─── Pairing flow ─────────────────────────────────────────────────────
-
-  async function handlePairing(ctx: any, userId: string, username: string, chatId: string): Promise<void> {
-    const policy = ctx.chat.type === "private" ? access.dm : access.group;
-
-    if (policy.policy === "disabled") return; // silently ignore
-    if (policy.policy === "open") return; // shouldn't reach here
-
-    // Auto-admin: first user to message becomes admin + allowed (no existing users)
     const hasAnyUsers = access.dm.allowed_users.length > 0 || access.dm.admin_users.length > 0;
     if (!hasAnyUsers) {
       access.dm.allowed_users.push(userId);
@@ -542,293 +937,587 @@ export async function createTelegramChannel(
       access.group.admin_users.push(userId);
       await saveAccess(accessPath, access);
       process.stderr.write(`[telegram] Auto-approved first user as admin: ${username} (${userId})\n`);
-      await ctx.reply(
-        `<b>Welcome!</b>\n\nYou're the first user — auto-approved as admin.\nSend any message to start chatting.`,
-        { parse_mode: "HTML" },
-      );
+      await sendMessage(chatId, "<b>Welcome!</b>\n\nYou're the first user and have been auto-approved as admin.", {
+        parseMode: "HTML",
+      });
       return;
     }
 
-    // Check if already has a pending pairing
-    const existing = Object.values(access.pending_pairings).find((p) => p.user_id === userId);
+    const existing = Object.values(access.pending_pairings).find((pairing) => pairing.user_id === userId);
     if (existing) {
-      await ctx.reply(
+      await sendMessage(
+        chatId,
         `Your pairing request is pending.\nCode: <code>${existing.code}</code>\nAsk an admin to run: /approve ${existing.code}`,
-        { parse_mode: "HTML" },
+        { parseMode: "HTML" },
       );
       return;
     }
 
-    // Generate new pairing
     const code = generatePairingCode();
     const pairingId = `${userId}-${Date.now()}`;
-    access.pending_pairings[pairingId] = { code, user_id: userId, username, chat_id: chatId, ts: Date.now() };
+    access.pending_pairings[pairingId] = {
+      code,
+      user_id: userId,
+      username,
+      chat_id: chatId,
+      ts: Date.now(),
+    };
     await saveAccess(accessPath, access);
 
-    await ctx.reply(
+    await sendMessage(
+      chatId,
       [
-        `<b>Pairing Required</b>`,
-        ``,
+        "<b>Pairing Required</b>",
+        "",
         `Your code: <code>${code}</code>`,
-        ``,
-        `Ask the Claude Code operator to approve you:`,
+        "",
+        "Ask an admin to approve you with:",
         `<code>/approve ${code}</code>`,
       ].join("\n"),
-      { parse_mode: "HTML" },
+      { parseMode: "HTML" },
     );
 
-    // Notify admins
     const adminIds = [...new Set([...access.dm.admin_users, ...access.group.admin_users])];
-    const keyboard = new InlineKeyboard().text(`Approve ${username}`, `pair:${pairingId}:approve`);
+    const keyboard: TelegramInlineKeyboard = {
+      inline_keyboard: [[{ text: `Approve ${username}`, callback_data: `pair:${pairingId}:approve` }]],
+    };
+
     for (const adminId of adminIds) {
       try {
-        await bot.api.sendMessage(
+        await sendMessage(
           adminId,
           `<b>Pairing Request</b>\n\nUser: @${escapeHtml(username)} (${userId})\nCode: <code>${code}</code>`,
-          { parse_mode: "HTML", reply_markup: keyboard },
+          {
+            parseMode: "HTML",
+            replyMarkup: keyboard,
+          },
         );
-      } catch {
-        // Admin may not have started the bot
-      }
+      } catch {}
     }
   }
 
-  // ─── Inbound: Bot messages → channel.pushMessage() ───────────────────────
-
-  // Helper: common access + group + rate limit checks
-  function checkAccess(ctx: any): { chatId: string; userId: string; username: string; isGroup: boolean } | null {
-    const chatId = String(ctx.chat.id);
-    const userId = String(ctx.from?.id ?? "");
-    const username = ctx.from?.username ?? ctx.from?.first_name ?? "unknown";
-    const isGroup = ctx.chat.type !== "private";
-
-    if (!isAllowed(userId, ctx.chat.type)) {
-      handlePairing(ctx, userId, username, chatId);
+  function extractIncomingInfo(message: TelegramMessage): IncomingInfo | null {
+    const chatId = message.chat?.id;
+    const chatType = message.chat?.type ?? "private";
+    const userId = message.from?.id;
+    if (chatId === undefined || userId === undefined) {
       return null;
     }
 
-    if (isGroup && cfg.groupTrigger === "never") return null;
-    if (isGroup && cfg.groupTrigger === "mention") {
-      const text = (ctx.message?.text ?? ctx.message?.caption ?? "").toLowerCase();
-      const mentioned = text.includes(`@${botUsername.toLowerCase()}`) ||
-        ctx.message?.reply_to_message?.from?.username?.toLowerCase() === botUsername.toLowerCase();
-      if (!mentioned) return null;
-    }
+    const fallbackName = [message.from?.first_name, message.from?.last_name].filter(Boolean).join(" ");
+    const username = (message.from?.username ?? fallbackName) || "unknown";
 
-    return { chatId, userId, username, isGroup };
+    return {
+      chatId: String(chatId),
+      userId: String(userId),
+      username,
+      isGroup: chatType !== "private",
+      chatType,
+    };
   }
 
-  // Helper: build meta with reply-to and forward context
-  function buildMeta(ctx: any, chatId: string, username: string, extra?: Record<string, string>): Record<string, string> {
-    const meta: Record<string, string> = {
-      chat_id: chatId,
-      message_id: String(ctx.message.message_id),
-      user: username,
-      ts: String(ctx.message.date),
-      ...extra,
-    };
-
-    // Reply-to context
-    const reply = ctx.message.reply_to_message;
-    if (reply) {
-      meta.reply_to_id = String(reply.message_id);
-      meta.reply_to_user = reply.from?.username ?? reply.from?.first_name ?? "unknown";
-      if (reply.text) meta.reply_to_text = reply.text.slice(0, 200);
+  async function checkAccess(message: TelegramMessage): Promise<IncomingInfo | null> {
+    const info = extractIncomingInfo(message);
+    if (!info) {
+      return null;
     }
 
-    // Forward context
-    if (ctx.message.forward_origin) {
-      const origin = ctx.message.forward_origin;
+    if (!isAllowed(info.userId, info.chatType)) {
+      await handlePairing(message, info.userId, info.username, info.chatId);
+      return null;
+    }
+
+    if (info.isGroup && cfg.groupTrigger === "never") {
+      return null;
+    }
+
+    if (info.isGroup && cfg.groupTrigger === "mention") {
+      const text = (message.text ?? message.caption ?? "").toLowerCase();
+      const mention = botUsername ? `@${botUsername.toLowerCase()}` : "";
+      const replyToBot = message.reply_to_message?.from?.is_bot === true
+        || message.reply_to_message?.from?.username?.toLowerCase() === botUsername.toLowerCase();
+      const mentioned = mention ? text.includes(mention) : false;
+      if (!mentioned && !replyToBot) {
+        return null;
+      }
+    }
+
+    return info;
+  }
+
+  function buildMeta(
+    message: TelegramMessage,
+    chatId: string,
+    username: string,
+    extra?: Record<string, string>,
+  ): Record<string, string> {
+    const meta: Record<string, string> = {
+      chat_id: chatId,
+      user: username,
+      ...(message.message_id !== undefined ? { message_id: String(message.message_id) } : {}),
+      ...(message.date !== undefined ? { ts: String(message.date) } : {}),
+      ...(message.message_thread_id !== undefined ? { thread_id: String(message.message_thread_id) } : {}),
+      ...(extra ?? {}),
+    };
+
+    const reply = message.reply_to_message;
+    if (reply) {
+      if (reply.message_id !== undefined) {
+        meta.reply_to_id = String(reply.message_id);
+      }
+      const replyFallbackName = [reply.from?.first_name, reply.from?.last_name].filter(Boolean).join(" ");
+      meta.reply_to_user = (reply.from?.username ?? replyFallbackName) || "unknown";
+      if (reply.text) {
+        meta.reply_to_text = reply.text.slice(0, 200);
+      }
+    }
+
+    if (message.forward_origin) {
+      const origin = message.forward_origin;
       if (origin.type === "user") {
-        meta.forwarded_from = origin.sender_user?.username ?? origin.sender_user?.first_name ?? "unknown";
+        meta.forwarded_from =
+          origin.sender_user?.username
+          ?? origin.sender_user?.first_name
+          ?? "unknown";
       } else if (origin.type === "channel") {
         meta.forwarded_from = origin.chat?.title ?? "channel";
       } else if (origin.type === "hidden_user") {
         meta.forwarded_from = origin.sender_user_name ?? "hidden";
       }
+    } else if (message.forward_from || message.forward_from_chat) {
+      meta.forwarded_from =
+        message.forward_from?.username
+        ?? message.forward_from?.first_name
+        ?? message.forward_from_chat?.title
+        ?? "unknown";
     }
 
     return meta;
   }
 
-  bot.on("message:text", async (ctx: any) => {
-    // Skip if it's a command (already handled above)
-    if (ctx.message.text.startsWith("/")) return;
-
-    const info = checkAccess(ctx);
-    if (!info) return;
-    const { chatId, userId, username, isGroup } = info;
-
-    activeChats.add(chatId);
-
-    startTyping(chatId);
-
-    // Build message with sender label for groups
-    let messageText = ctx.message.text;
-    if (isGroup) {
-      messageText = `[From: ${username} (id:${userId})]\n${messageText}`;
+  function parseCommand(messageText: string): { command: string; arg: string } | null {
+    if (!messageText.startsWith("/")) {
+      return null;
     }
 
-    // Include reply-to quote
-    const reply = ctx.message.reply_to_message;
-    if (reply?.text) {
-      messageText = `[Replying to ${reply.from?.username ?? "user"}: "${reply.text.slice(0, 100)}"]\n${messageText}`;
+    const [firstWord, ...rest] = messageText.trim().split(/\s+/);
+    const commandPart = firstWord.slice(1);
+    const [rawCommand, targetBot] = commandPart.split("@");
+    if (targetBot && botUsername && targetBot.toLowerCase() !== botUsername.toLowerCase()) {
+      return null;
     }
 
-    await channel.pushMessage(messageText, buildMeta(ctx, chatId, username));
-  });
+    return {
+      command: rawCommand.toLowerCase(),
+      arg: rest.join(" ").trim(),
+    };
+  }
 
-  bot.on("message:photo", async (ctx: any) => {
-    const info = checkAccess(ctx);
-    if (!info) return;
+  async function handleCommand(message: TelegramMessage): Promise<boolean> {
+    const info = extractIncomingInfo(message);
+    if (!info) {
+      return false;
+    }
+
+    const text = message.text ?? "";
+    const parsed = parseCommand(text);
+    if (!parsed) {
+      return false;
+    }
+
+    const { command, arg } = parsed;
+
+    if (command !== "approve" && !isAllowed(info.userId, info.chatType)) {
+      await handlePairing(message, info.userId, info.username, info.chatId);
+      return true;
+    }
+
+    switch (command) {
+      case "start": {
+        const keyboard: TelegramInlineKeyboard = {
+          inline_keyboard: [
+            [{ text: "Status", callback_data: "cmd:status" }, { text: "Help", callback_data: "cmd:help" }],
+            [{ text: "Stop", callback_data: "cmd:stop" }, { text: "New Chat", callback_data: "cmd:new" }],
+          ],
+        };
+        await sendMessage(
+          info.chatId,
+          "<b>Talon Channels</b>\n\nConnected to Claude Code via Telegram.\nSend any message to start chatting.",
+          { parseMode: "HTML", replyMarkup: keyboard },
+        );
+        return true;
+      }
+      case "help": {
+        await sendMessage(
+          info.chatId,
+          [
+            "<b>Commands</b>",
+            "",
+            "/start - Welcome message",
+            "/help - This help",
+            "/status - Connection status",
+            "/stop - Interrupt current task",
+            "/new - Clear conversation context",
+            "/streaming - Toggle live tool status updates",
+            "/approve <code> - Approve a pairing request (admin)",
+          ].join("\n"),
+          { parseMode: "HTML" },
+        );
+        return true;
+      }
+      case "status": {
+        const pendingCount = Object.keys(access.pending_pairings).length;
+        const policy = info.isGroup ? access.group : access.dm;
+        await sendMessage(
+          info.chatId,
+          [
+            "<b>Status</b>",
+            "",
+            `<b>Chat:</b> ${info.chatId}`,
+            `<b>User:</b> ${info.userId}`,
+            `<b>Admin:</b> ${isAdmin(info.userId) ? "Yes" : "No"}`,
+            `<b>Policy:</b> ${policy.policy}`,
+            `<b>Allowed users:</b> ${policy.allowed_users.length}`,
+            `<b>Pending pairings:</b> ${pendingCount}`,
+            `<b>Bot:</b> @${escapeHtml(botUsername || "unknown")}`,
+          ].join("\n"),
+          { parseMode: "HTML" },
+        );
+        return true;
+      }
+      case "stop": {
+        await sendMessage(info.chatId, "Stop signal sent.");
+        await channel.pushMessage("/stop", {
+          chat_id: info.chatId,
+          user: info.username,
+          ...(message.message_id !== undefined ? { message_id: String(message.message_id) } : {}),
+        });
+        return true;
+      }
+      case "new": {
+        await sendMessage(info.chatId, "Conversation context cleared.");
+        await channel.pushMessage("/new - start fresh conversation", {
+          chat_id: info.chatId,
+          user: info.username,
+          ...(message.message_id !== undefined ? { message_id: String(message.message_id) } : {}),
+        });
+        return true;
+      }
+      case "streaming": {
+        const next = !isStreamingEnabled(info.chatId);
+        streamingEnabled.set(info.chatId, next);
+        await sendMessage(info.chatId, `Streaming status updates: <b>${next ? "ON" : "OFF"}</b>`, {
+          parseMode: "HTML",
+        });
+        return true;
+      }
+      case "approve": {
+        if (!isAdmin(info.userId)) {
+          await sendMessage(info.chatId, "Only admins can approve pairing requests.");
+          return true;
+        }
+
+        const code = arg.toUpperCase();
+        if (!code) {
+          await sendMessage(info.chatId, "Usage: /approve <code>");
+          return true;
+        }
+
+        const entry = Object.entries(access.pending_pairings).find(([, value]) => value.code === code);
+        if (!entry) {
+          await sendMessage(info.chatId, `No pending pairing with code: ${code}`);
+          return true;
+        }
+
+        const [pairingId, pairing] = entry;
+        if (!access.dm.allowed_users.includes(pairing.user_id)) {
+          access.dm.allowed_users.push(pairing.user_id);
+        }
+        if (!access.group.allowed_users.includes(pairing.user_id)) {
+          access.group.allowed_users.push(pairing.user_id);
+        }
+        delete access.pending_pairings[pairingId];
+        await saveAccess(accessPath, access);
+
+        await sendMessage(info.chatId, `Approved @${pairing.username} (${pairing.user_id})`);
+        try {
+          await sendMessage(pairing.chat_id, "You've been approved! Send any message to start chatting.");
+        } catch {}
+        return true;
+      }
+      default:
+        return false;
+    }
+  }
+
+  async function handleTextMessage(message: TelegramMessage): Promise<void> {
+    const info = await checkAccess(message);
+    if (!info || !message.text) {
+      return;
+    }
 
     activeChats.add(info.chatId);
-
     startTyping(info.chatId);
 
-    const caption = ctx.message.caption ?? "[Photo received]";
-    const photos = ctx.message.photo;
-    const largest = photos[photos.length - 1];
+    let messageText = message.text;
+    if (info.isGroup) {
+      messageText = `[From: ${info.username} (id:${info.userId})]\n${messageText}`;
+    }
 
-    // Try to download photo to disk
-    let imagePath: string | undefined;
-    try {
-      imagePath = await downloadFile(largest.file_id);
-    } catch {}
+    const reply = message.reply_to_message;
+    if (reply?.text) {
+      const replyFallbackName = [reply.from?.first_name, reply.from?.last_name].filter(Boolean).join(" ");
+      const replyUser = (reply.from?.username ?? replyFallbackName) || "user";
+      messageText = `[Replying to ${replyUser}: "${reply.text.slice(0, 100)}"]\n${messageText}`;
+    }
 
-    await channel.pushMessage(caption, buildMeta(ctx, info.chatId, info.username, {
-      image_file_id: largest.file_id,
-      ...(imagePath ? { image_path: imagePath } : {}),
-    }));
-  });
+    await channel.pushMessage(messageText, buildMeta(message, info.chatId, info.username));
+  }
 
-  bot.on("message:document", async (ctx: any) => {
-    const info = checkAccess(ctx);
-    if (!info) return;
+  async function handlePhotoMessage(message: TelegramMessage): Promise<void> {
+    const info = await checkAccess(message);
+    const photos = message.photo;
+    if (!info || !photos || photos.length === 0) {
+      return;
+    }
 
     activeChats.add(info.chatId);
+    startTyping(info.chatId);
 
+    const largest = photos[photos.length - 1];
+    const fileId = largest?.file_id;
+    if (!fileId) {
+      return;
+    }
 
-    const doc = ctx.message.document;
-    const caption = ctx.message.caption ?? `[Document: ${doc.file_name ?? "file"}]`;
+    let imagePath: string | undefined;
+    let imageDataUri: string | undefined;
+    try {
+      imageDataUri = await downloadPhotoAsDataUri(fileId);
+      imagePath = await downloadFile(fileId);
+    } catch {}
 
-    // Download document
+    await channel.pushMessage(
+      message.caption ?? "What's in this image?",
+      buildMeta(message, info.chatId, info.username, {
+        image_file_id: fileId,
+        ...(imagePath ? { image_path: imagePath } : {}),
+        ...(imageDataUri ? { image_data_uri: imageDataUri } : {}),
+      }),
+    );
+  }
+
+  async function handleDocumentMessage(message: TelegramMessage): Promise<void> {
+    const info = await checkAccess(message);
+    const document = message.document;
+    if (!info || !document?.file_id) {
+      return;
+    }
+
+    activeChats.add(info.chatId);
     let filePath: string | undefined;
     try {
-      filePath = await downloadFile(doc.file_id, doc.file_name);
+      filePath = await downloadFile(document.file_id, document.file_name);
     } catch {}
 
-    await channel.pushMessage(caption, buildMeta(ctx, info.chatId, info.username, {
-      document_file_id: doc.file_id,
-      document_name: doc.file_name ?? "file",
-      ...(filePath ? { file_path: filePath } : {}),
-    }));
-  });
+    await channel.pushMessage(
+      message.caption ?? `[Document: ${document.file_name ?? "file"}]`,
+      buildMeta(message, info.chatId, info.username, {
+        document_file_id: document.file_id,
+        document_name: document.file_name ?? "file",
+        ...(filePath ? { file_path: filePath } : {}),
+      }),
+    );
+  }
 
-  bot.on("message:voice", async (ctx: any) => {
-    const info = checkAccess(ctx);
-    if (!info) return;
+  async function handleVoiceMessage(message: TelegramMessage): Promise<void> {
+    const info = await checkAccess(message);
+    const voice = message.voice ?? message.audio;
+    if (!info || !voice?.file_id) {
+      return;
+    }
 
     activeChats.add(info.chatId);
-
     startTyping(info.chatId);
 
-    // Download voice file
     let voicePath: string | undefined;
+    let transcription: string | undefined;
     try {
-      voicePath = await downloadFile(ctx.message.voice.file_id);
+      voicePath = await downloadFile(voice.file_id);
+      transcription = await transcribeVoice(voicePath);
     } catch {}
 
-    await channel.pushMessage("[Voice message received]", buildMeta(ctx, info.chatId, info.username, {
-      voice_file_id: ctx.message.voice.file_id,
-      voice_duration: String(ctx.message.voice.duration),
-      ...(voicePath ? { voice_path: voicePath } : {}),
-    }));
-  });
+    const text = transcription
+      ? `[Voice]: ${transcription}`
+      : "[Voice message received but transcription failed. Install whisper or configure GROQ_API_KEY.]";
 
-  bot.on("message:sticker", async (ctx: any) => {
-    const info = checkAccess(ctx);
-    if (!info) return;
+    await channel.pushMessage(
+      text,
+      buildMeta(message, info.chatId, info.username, {
+        voice_file_id: voice.file_id,
+        ...(voice.duration !== undefined ? { voice_duration: String(voice.duration) } : {}),
+        ...(voicePath ? { voice_path: voicePath } : {}),
+      }),
+    );
+  }
 
-    activeChats.add(info.chatId);
-
-
-    const sticker = ctx.message.sticker;
-    const text = `[Sticker: ${sticker.emoji ?? ""} from set "${sticker.set_name ?? "unknown"}"]`;
-    await channel.pushMessage(text, buildMeta(ctx, info.chatId, info.username));
-  });
-
-  bot.on("message:location", async (ctx: any) => {
-    const info = checkAccess(ctx);
-    if (!info) return;
+  async function handleStickerMessage(message: TelegramMessage): Promise<void> {
+    const info = await checkAccess(message);
+    const sticker = message.sticker;
+    if (!info || !sticker) {
+      return;
+    }
 
     activeChats.add(info.chatId);
+    await channel.pushMessage(
+      `[Sticker: ${sticker.emoji ?? ""} from set "${sticker.set_name ?? "unknown"}"]`,
+      buildMeta(message, info.chatId, info.username),
+    );
+  }
 
-
-    const loc = ctx.message.location;
-    await channel.pushMessage(`[Location: ${loc.latitude}, ${loc.longitude}]`, buildMeta(ctx, info.chatId, info.username));
-  });
-
-  bot.on("message:contact", async (ctx: any) => {
-    const info = checkAccess(ctx);
-    if (!info) return;
+  async function handleAnimationMessage(message: TelegramMessage): Promise<void> {
+    const info = await checkAccess(message);
+    const animation = message.animation;
+    if (!info || !animation?.file_id) {
+      return;
+    }
 
     activeChats.add(info.chatId);
+    await channel.pushMessage(
+      message.caption ?? "[GIF/Animation received]",
+      buildMeta(message, info.chatId, info.username, {
+        animation_file_id: animation.file_id,
+      }),
+    );
+  }
 
+  async function handleLocationMessage(message: TelegramMessage): Promise<void> {
+    const info = await checkAccess(message);
+    const location = message.location;
+    if (!info || !location) {
+      return;
+    }
 
-    const contact = ctx.message.contact;
+    activeChats.add(info.chatId);
+    await channel.pushMessage(
+      `[Location: ${location.latitude ?? 0}, ${location.longitude ?? 0}]`,
+      buildMeta(message, info.chatId, info.username),
+    );
+  }
+
+  async function handleContactMessage(message: TelegramMessage): Promise<void> {
+    const info = await checkAccess(message);
+    const contact = message.contact;
+    if (!info || !contact) {
+      return;
+    }
+
+    activeChats.add(info.chatId);
     const name = [contact.first_name, contact.last_name].filter(Boolean).join(" ");
-    await channel.pushMessage(`[Contact: ${name}, ${contact.phone_number}]`, buildMeta(ctx, info.chatId, info.username));
-  });
+    await channel.pushMessage(
+      `[Contact: ${name}, ${contact.phone_number ?? ""}]`,
+      buildMeta(message, info.chatId, info.username),
+    );
+  }
 
-  bot.on("message:animation", async (ctx: any) => {
-    const info = checkAccess(ctx);
-    if (!info) return;
+  async function handleIncomingMessage(message: TelegramMessage): Promise<void> {
+    if (message.text?.startsWith("/")) {
+      const handled = await handleCommand(message);
+      if (handled) {
+        return;
+      }
+    }
 
-    activeChats.add(info.chatId);
+    if (message.text) {
+      await handleTextMessage(message);
+      return;
+    }
+    if (message.photo?.length) {
+      await handlePhotoMessage(message);
+      return;
+    }
+    if (message.document) {
+      await handleDocumentMessage(message);
+      return;
+    }
+    if (message.voice || message.audio) {
+      await handleVoiceMessage(message);
+      return;
+    }
+    if (message.sticker) {
+      await handleStickerMessage(message);
+      return;
+    }
+    if (message.animation) {
+      await handleAnimationMessage(message);
+      return;
+    }
+    if (message.location) {
+      await handleLocationMessage(message);
+      return;
+    }
+    if (message.contact) {
+      await handleContactMessage(message);
+    }
+  }
 
+  async function updateCallbackMessage(chatId: string, messageId: number, originalText: string, suffix: string): Promise<void> {
+    try {
+      await editMessageText(chatId, messageId, `${originalText}\n\n${suffix}`, {
+        replyMarkup: { inline_keyboard: [] },
+      });
+    } catch {}
+  }
 
-    const caption = ctx.message.caption ?? "[GIF/Animation received]";
-    await channel.pushMessage(caption, buildMeta(ctx, info.chatId, info.username, {
-      animation_file_id: ctx.message.animation.file_id,
-    }));
-  });
+  async function handleCallbackQuery(callbackQuery: TelegramCallbackQuery): Promise<void> {
+    const data = callbackQuery.data ?? "";
+    const callbackQueryId = callbackQuery.id;
+    const message = callbackQuery.message;
+    const chatId = message?.chat?.id !== undefined ? String(message.chat.id) : undefined;
+    const messageId = message?.message_id;
+    const originalText = message?.text ?? "Telegram action";
 
-  // ─── Callback queries (permission + pairing + commands) ────────────────
+    if (callbackQueryId) {
+      try {
+        await answerCallbackQuery(callbackQueryId);
+      } catch {}
+    }
 
-  bot.on("callback_query:data", async (ctx: any) => {
-    const data = ctx.callbackQuery.data;
+    if (!data) {
+      return;
+    }
 
-    // Permission callbacks
     if (data.startsWith("perm:")) {
       const [, requestId, decision] = data.split(":");
       if (requestId && (decision === "allow" || decision === "deny")) {
         await channel.sendPermissionVerdict({ request_id: requestId, behavior: decision });
         pendingPermissions.delete(requestId);
-
-        try {
-          await ctx.editMessageReplyMarkup({ reply_markup: undefined });
-          await ctx.editMessageText(
-            `${ctx.callbackQuery.message && "text" in ctx.callbackQuery.message ? ctx.callbackQuery.message.text : "Permission request"}\n\n${decision === "allow" ? "\u2705 Allowed" : "\u274c Denied"} by ${ctx.from?.username ?? ctx.from?.first_name ?? "user"}`,
+        if (chatId && messageId !== undefined) {
+          await updateCallbackMessage(
+            chatId,
+            messageId,
+            originalText,
+            `${decision === "allow" ? "\u2705 Allowed" : "\u274c Denied"} by ${callbackQuery.from?.username ?? callbackQuery.from?.first_name ?? "user"}`,
           );
-        } catch {}
+        }
       }
-      await ctx.answerCallbackQuery({ text: `Permission ${decision}` });
       return;
     }
 
-    // Pairing approval callbacks
     if (data.startsWith("pair:")) {
-      const userId = String(ctx.from?.id ?? "");
-      if (!isAdmin(userId)) {
-        await ctx.answerCallbackQuery({ text: "Only admins can approve" });
+      const actorId = callbackQuery.from?.id !== undefined ? String(callbackQuery.from.id) : "";
+      if (!isAdmin(actorId)) {
+        if (callbackQueryId) {
+          try {
+            await answerCallbackQuery(callbackQueryId, "Only admins can approve");
+          } catch {}
+        }
         return;
       }
 
       const [, pairingId, action] = data.split(":");
       const pairing = access.pending_pairings[pairingId];
       if (!pairing) {
-        await ctx.answerCallbackQuery({ text: "Pairing not found or already handled" });
         return;
       }
 
@@ -841,93 +1530,98 @@ export async function createTelegramChannel(
         }
         delete access.pending_pairings[pairingId];
         await saveAccess(accessPath, access);
-
+        if (chatId && messageId !== undefined) {
+          await updateCallbackMessage(chatId, messageId, originalText, `\u2705 Approved @${pairing.username} (${pairing.user_id})`);
+        }
         try {
-          await ctx.editMessageReplyMarkup({ reply_markup: undefined });
-          await ctx.editMessageText(
-            `\u2705 Approved @${pairing.username} (${pairing.user_id})`,
-          );
-        } catch {}
-
-        try {
-          await bot.api.sendMessage(pairing.chat_id, "You've been approved! Send any message to start chatting.");
+          await sendMessage(pairing.chat_id, "You've been approved! Send any message to start chatting.");
         } catch {}
       }
-      await ctx.answerCallbackQuery({ text: "Approved" });
       return;
     }
 
-    // Command callbacks
     if (data.startsWith("cmd:")) {
-      const cmd = data.slice(4);
-      switch (cmd) {
-        case "status":
-          await ctx.answerCallbackQuery();
-          await bot.api.sendMessage(ctx.chat!.id, `Connected. Active chats: ${activeChats.size}`);
-          break;
-        case "help":
-          await ctx.answerCallbackQuery();
-          await bot.api.sendMessage(ctx.chat!.id, "/start \u2014 Welcome\n/help \u2014 Commands\n/status \u2014 Status\n/stop \u2014 Interrupt\n/new \u2014 Fresh chat");
-          break;
-        case "stop":
-          await ctx.answerCallbackQuery({ text: "Stop signal sent" });
-          await channel.pushMessage("/stop", {
-            chat_id: String(ctx.chat!.id),
-            user: ctx.from?.username ?? "user",
-          });
-          break;
-        case "new":
-          await ctx.answerCallbackQuery({ text: "Conversation cleared" });
-          await channel.pushMessage("/new", {
-            chat_id: String(ctx.chat!.id),
-            user: ctx.from?.username ?? "user",
-          });
-          break;
-        default:
-          await ctx.answerCallbackQuery();
+      const command = data.slice(4);
+      if (!chatId) {
+        return;
       }
+      switch (command) {
+        case "status":
+          await sendMessage(chatId, `Connected. Active chats: ${activeChats.size}`);
+          return;
+        case "help":
+          await sendMessage(chatId, "/start - Welcome\n/help - Commands\n/status - Status\n/stop - Interrupt\n/new - Fresh chat");
+          return;
+        case "stop":
+          await channel.pushMessage("/stop", {
+            chat_id: chatId,
+            user: callbackQuery.from?.username ?? callbackQuery.from?.first_name ?? "user",
+          });
+          return;
+        case "new":
+          await channel.pushMessage("/new", {
+            chat_id: chatId,
+            user: callbackQuery.from?.username ?? callbackQuery.from?.first_name ?? "user",
+          });
+          return;
+        default:
+          return;
+      }
+    }
+  }
+
+  async function handleUpdate(update: TelegramUpdate): Promise<void> {
+    if (update.callback_query) {
+      await handleCallbackQuery(update.callback_query);
+      return;
+    }
+    if (update.message) {
+      await handleIncomingMessage(update.message);
+    }
+  }
+
+  const webhookServer = http.createServer((req, res) => {
+    if (req.method !== "POST" || req.url !== webhookPath) {
+      res.writeHead(404);
+      res.end();
       return;
     }
 
-    await ctx.answerCallbackQuery();
-  });
+    const secretHeader = req.headers["x-telegram-bot-api-secret-token"];
+    const providedSecret = Array.isArray(secretHeader) ? secretHeader[0] : secretHeader;
+    if (webhookSecret && !constantTimeEquals(webhookSecret, providedSecret ?? "")) {
+      res.writeHead(401);
+      res.end("Invalid secret");
+      return;
+    }
 
-  // ─── Outbound: channel.onReply() → Telegram send ────────────────────────
+    const chunks: Buffer[] = [];
+    req.on("data", (chunk: Buffer) => chunks.push(chunk));
+    req.on("end", () => {
+      let update: TelegramUpdate;
+      try {
+        update = JSON.parse(Buffer.concat(chunks).toString("utf-8")) as TelegramUpdate;
+      } catch (error: any) {
+        process.stderr.write(`[telegram] Webhook parse error: ${error.message}\n`);
+        res.writeHead(400);
+        res.end("Bad request");
+        return;
+      }
+
+      res.writeHead(200);
+      res.end("OK");
+
+      void handleUpdate(update).catch((error: any) => {
+        process.stderr.write(`[telegram] Webhook handler error: ${error.message}\n`);
+      });
+    });
+  });
 
   channel.onReply(async (chatId: string, text: string) => {
     stopTyping(chatId);
     await clearStreamingStatus(chatId);
-    const html = mdToHtml(text);
-    const chunks = chunkText(html, MAX_MSG_LEN);
-    for (let i = 0; i < chunks.length; i++) {
-      if (i > 0) await sleep(300); // Delay between chunks
-      for (let attempt = 0; attempt < 3; attempt++) {
-        try {
-          await bot.api.sendMessage(chatId, chunks[i], { parse_mode: "HTML" });
-          break;
-        } catch (err: any) {
-          if (err?.error_code === 429) {
-            const retryAfter = err.parameters?.retry_after ?? 5;
-            await sleep(retryAfter * 1000);
-            continue;
-          }
-          // Fall back to plain text on parse error
-          if (attempt === 0 && err?.error_code === 400) {
-            try {
-              await bot.api.sendMessage(chatId, text);
-            } catch {
-              process.stderr.write(`[telegram] Failed to send to ${chatId}: ${err.message}\n`);
-            }
-            break;
-          }
-          process.stderr.write(`[telegram] Send error: ${err.message}\n`);
-          break;
-        }
-      }
-    }
+    await sendTextResponse(chatId, text);
   });
-
-  // ─── Permission prompts → inline keyboards ──────────────────────────────
 
   channel.onPermissionRequest(async (req: ChannelPermissionRequest) => {
     const targetChats = [...activeChats];
@@ -936,9 +1630,12 @@ export async function createTelegramChannel(
       return;
     }
 
-    const keyboard = new InlineKeyboard()
-      .text("\u2705 Allow", `perm:${req.request_id}:allow`)
-      .text("\u274c Deny", `perm:${req.request_id}:deny`);
+    const keyboard: TelegramInlineKeyboard = {
+      inline_keyboard: [[
+        { text: "\u2705 Allow", callback_data: `perm:${req.request_id}:allow` },
+        { text: "\u274c Deny", callback_data: `perm:${req.request_id}:deny` },
+      ]],
+    };
 
     const message = [
       "<b>\ud83d\udd10 Permission Request</b>",
@@ -951,119 +1648,106 @@ export async function createTelegramChannel(
 
     for (const chatId of targetChats) {
       try {
-        await bot.api.sendMessage(chatId, message, {
-          parse_mode: "HTML",
-          reply_markup: keyboard,
+        await sendMessage(chatId, message, {
+          parseMode: "HTML",
+          replyMarkup: keyboard,
         });
         pendingPermissions.set(req.request_id, { chatId });
-      } catch (err: any) {
-        process.stderr.write(`[telegram] Permission prompt error: ${err.message}\n`);
+      } catch (error: any) {
+        process.stderr.write(`[telegram] Permission prompt error: ${error.message}\n`);
       }
     }
   });
 
-  // ─── Extra tool handlers ─────────────────────────────────────────────────
-
   channel.onToolCall(async (name: string, args: Record<string, unknown>) => {
     switch (name) {
       case "telegram_send": {
-        const chatId = args.chat_id as string;
-        const text = args.text as string;
-        const replyTo = args.reply_to as string | undefined;
-        const parseMode = args.parse_mode as string | undefined;
-        const files = args.files as string[] | undefined;
-        const buttons = args.buttons as Array<{ text: string; callback_data: string }> | undefined;
+        const chatId = String(args.chat_id ?? "");
+        const text = String(args.text ?? "");
+        const replyTo = args.reply_to ? parseInt(String(args.reply_to), 10) : undefined;
+        const parseMode = args.parse_mode === "html" ? "HTML" : undefined;
+        const files = Array.isArray(args.files) ? args.files.map((entry) => String(entry)) : undefined;
+        const rawButtons = Array.isArray(args.buttons)
+          ? args.buttons as Array<{ text?: string; callback_data?: string }>
+          : undefined;
 
-        const opts: Record<string, any> = {};
-        if (parseMode === "html") opts.parse_mode = "HTML";
-        if (replyTo) opts.reply_to_message_id = parseInt(replyTo, 10);
-        if (buttons && buttons.length > 0) {
-          const kb = new InlineKeyboard();
-          for (const btn of buttons) {
-            kb.text(btn.text, btn.callback_data);
+        const replyMarkup = rawButtons && rawButtons.length > 0
+          ? {
+            inline_keyboard: [rawButtons.map((button) => ({
+              text: String(button.text ?? ""),
+              callback_data: String(button.callback_data ?? ""),
+            }))],
           }
-          opts.reply_markup = kb;
-        }
+          : undefined;
 
         if (files && files.length > 0) {
           for (const filePath of files) {
             try {
-              await bot.api.sendDocument(chatId, new InputFile(filePath), {
-                caption: text,
-                ...opts,
-              });
-            } catch (err: any) {
-              process.stderr.write(`[telegram] File send error: ${err.message}\n`);
+              if (isImagePath(filePath)) {
+                await sendPhoto(chatId, filePath, text, { parseMode, replyTo, replyMarkup });
+              } else {
+                await sendDocument(chatId, filePath, text, { parseMode, replyTo, replyMarkup });
+              }
+            } catch (error: any) {
+              process.stderr.write(`[telegram] File send error: ${error.message}\n`);
             }
           }
           return { ok: true, sent: files.length };
         }
 
-        const chunks = chunkText(text, MAX_MSG_LEN);
+        const chunks = chunkText(parseMode === "HTML" ? text : text, MAX_MSG_LEN);
         const sentIds: number[] = [];
         for (const chunk of chunks) {
-          for (let attempt = 0; attempt < 3; attempt++) {
-            try {
-              const msg = await bot.api.sendMessage(chatId, chunk, opts);
-              sentIds.push(msg.message_id);
-              break;
-            } catch (err: any) {
-              if (err?.error_code === 429) {
-                await sleep((err.parameters?.retry_after ?? 5) * 1000);
-                continue;
-              }
-              throw err;
-            }
+          const msg = await sendMessage(chatId, chunk, {
+            parseMode,
+            replyTo,
+            replyMarkup,
+          });
+          if (msg.message_id !== undefined) {
+            sentIds.push(msg.message_id);
           }
         }
         return { ok: true, message_ids: sentIds };
       }
 
       case "telegram_react": {
-        const chatId = args.chat_id as string;
-        const messageId = parseInt(args.message_id as string, 10);
-        const emoji = args.emoji as string;
-
-        await bot.api.setMessageReaction(chatId, messageId, [{ type: "emoji", emoji }]);
+        const chatId = String(args.chat_id ?? "");
+        const messageId = parseInt(String(args.message_id ?? "0"), 10);
+        const emoji = String(args.emoji ?? "");
+        await setMessageReaction(chatId, messageId, emoji);
         return { ok: true };
       }
 
       case "telegram_edit": {
-        const chatId = args.chat_id as string;
-        const messageId = parseInt(args.message_id as string, 10);
-        let text = args.text as string;
-        const parseMode = args.parse_mode as string | undefined;
-
-        const opts: Record<string, any> = {};
-        if (parseMode === "html") {
-          opts.parse_mode = "HTML";
-        }
-
-        await bot.api.editMessageText(chatId, messageId, text, opts);
+        const chatId = String(args.chat_id ?? "");
+        const messageId = parseInt(String(args.message_id ?? "0"), 10);
+        const text = String(args.text ?? "");
+        const parseMode = args.parse_mode === "html" ? "HTML" : undefined;
+        await editMessageText(chatId, messageId, text, { parseMode });
         return { ok: true };
       }
 
       case "telegram_poll": {
-        const chatId = args.chat_id as string;
-        const question = args.question as string;
+        const chatId = String(args.chat_id ?? "");
+        const question = String(args.question ?? "");
         let rawOptions = args.options;
         if (typeof rawOptions === "string") {
-          try { rawOptions = JSON.parse(rawOptions); } catch { rawOptions = [rawOptions]; }
+          try {
+            rawOptions = JSON.parse(rawOptions) as string[];
+          } catch {
+            rawOptions = [rawOptions];
+          }
         }
-        const options = (rawOptions as string[]).map((o) => ({ text: o }));
-        const allowMultiple = (args.allow_multiple as boolean) ?? false;
-        const isAnonymous = (args.is_anonymous as boolean) ?? true;
-
-        const msg = await bot.api.sendPoll(chatId, question, options, {
-          allows_multiple_answers: allowMultiple,
-          is_anonymous: isAnonymous,
-        });
-        return { ok: true, message_id: msg.message_id };
+        const options = Array.isArray(rawOptions) ? rawOptions.map((entry) => String(entry)) : [];
+        const allowMultiple = Boolean(args.allow_multiple);
+        const isAnonymous = args.is_anonymous === undefined ? true : Boolean(args.is_anonymous);
+        const result = await sendPoll(chatId, question, options, allowMultiple, isAnonymous);
+        return { ok: true, message_id: result.message_id };
       }
 
       case "telegram_download": {
-        const fileId = args.file_id as string;
-        const filename = args.filename as string | undefined;
+        const fileId = String(args.file_id ?? "");
+        const filename = args.filename ? String(args.filename) : undefined;
         const path = await downloadFile(fileId, filename);
         return { ok: true, path };
       }
@@ -1073,17 +1757,13 @@ export async function createTelegramChannel(
     }
   });
 
-  // ─── Hook events → forward to active chats ──────────────────────────────
-
   channel.onHookEvent(async (input) => {
-    // Streaming: show tool execution status
     if (input.hook_event_name === "PreToolUse" && "tool_name" in input) {
       for (const chatId of activeChats) {
-        await updateStreamingStatus(chatId, (input as any).tool_name);
+        await updateStreamingStatus(chatId, input.tool_name);
       }
     }
 
-    // Session end: clear all typing/streaming
     if (input.hook_event_name === "SessionEnd") {
       for (const chatId of activeChats) {
         stopTyping(chatId);
@@ -1091,11 +1771,10 @@ export async function createTelegramChannel(
       }
     }
 
-    // Notifications
     if (input.hook_event_name === "Notification" && "message" in input) {
       for (const chatId of activeChats) {
         try {
-          await bot.api.sendMessage(chatId, `\u2139\ufe0f ${(input as any).message}`);
+          await sendMessage(chatId, `\u2139\ufe0f ${String(input.message)}`);
         } catch {}
       }
     }
@@ -1103,12 +1782,10 @@ export async function createTelegramChannel(
     return {};
   });
 
-  // ─── Register bot commands ──────────────────────────────────────────────
-
   try {
-    const me = await bot.api.getMe();
+    const me = await getMe();
     botUsername = me.username ?? "";
-    await bot.api.setMyCommands([
+    await setMyCommands([
       { command: "start", description: "Welcome message" },
       { command: "help", description: "Show commands" },
       { command: "status", description: "Connection status" },
@@ -1117,25 +1794,48 @@ export async function createTelegramChannel(
       { command: "streaming", description: "Toggle live status updates" },
       { command: "approve", description: "Approve pairing (admin)" },
     ]);
-  } catch (err: any) {
-    process.stderr.write(`[telegram] Failed to register commands: ${err.message}\n`);
+  } catch (error: any) {
+    process.stderr.write(`[telegram] Failed to initialize bot metadata: ${error.message}\n`);
   }
 
-  // ─── Start bot ───────────────────────────────────────────────────────────
-
-  bot.catch((err: any) => {
-    process.stderr.write(`[telegram] Bot error: ${err.message}\n`);
+  await new Promise<void>((resolve) => {
+    webhookServer.listen(webhookPort, webhookHost, () => {
+      process.stderr.write(`[telegram] Webhook server listening on http://${webhookHost}:${webhookPort}${webhookPath}\n`);
+      resolve();
+    });
   });
 
-  bot.start({ drop_pending_updates: true });
-  process.stderr.write(`[telegram] Bot polling started (@${botUsername})\n`);
+  if (cfg.webhookUrl) {
+    try {
+      await setWebhook(cfg.webhookUrl, webhookSecret);
+      webhookRegistered = true;
+      process.stderr.write(`[telegram] Webhook registered: ${cfg.webhookUrl}\n`);
+    } catch (error: any) {
+      process.stderr.write(`[telegram] Failed to register webhook: ${error.message}\n`);
+    }
+  } else {
+    process.stderr.write(`[telegram] TELEGRAM_WEBHOOK_URL not set; server is listening but webhook registration was skipped\n`);
+  }
+
+  process.stderr.write(`[telegram] Webhook mode ready (@${botUsername || "unknown"})\n`);
   process.stderr.write(`[telegram] DM policy: ${access.dm.policy}, Group policy: ${access.group.policy}\n`);
   process.stderr.write(`[telegram] Allowed DM users: ${access.dm.allowed_users.length}, Admins: ${access.dm.admin_users.length}\n`);
 
   const cleanup = () => {
-    for (const interval of typingIntervals.values()) clearInterval(interval);
+    if (shuttingDown) {
+      return;
+    }
+    shuttingDown = true;
+
+    for (const interval of typingIntervals.values()) {
+      clearInterval(interval);
+    }
     typingIntervals.clear();
-    bot.stop();
+
+    webhookServer.close();
+    if (webhookRegistered) {
+      void deleteWebhook().catch(() => {});
+    }
     channel.cleanup();
   };
 

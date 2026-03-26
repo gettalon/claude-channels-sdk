@@ -1,18 +1,20 @@
 /**
  * Telegram Channel Adapter
  *
- * Uses grammy for bot polling. Features:
+ * Uses direct Telegram Bot API HTTP calls with a local webhook server.
+ * Features:
+ * - No grammy dependency or framework abstraction
+ * - Webhook mode with optional automatic setWebhook/deleteWebhook
  * - Pairing flow: code challenge + /approve for unknown senders
  * - Access control: allowlist, admin users, DM/group policies
- * - Markdown->HTML conversion, message chunking (4096 limit) with ⏬ markers
+ * - Markdown->HTML conversion, message chunking (4096 limit) with continuation markers
  * - Inline keyboard permission prompts (Allow/Deny)
  * - Typing indicators while processing
  * - Streaming status: live-updating message showing tool execution
- * - Group chat: mention detection, sender labels
- * - Bot commands: /start, /help, /status, /stop, /new
- * - Message types: text, photo, document, voice, sticker, location, contact, forward, reply-to
- * - File download: photos and documents saved to disk
- * - Rate limiting: per-chat cooldown
+ * - Bot commands: /start, /help, /status, /stop, /new, /streaming
+ * - Message types: text, photo, document, voice, sticker, animation, location, contact
+ * - File download: photos/documents/voice saved to disk
+ * - Voice transcription: Groq Whisper API with local whisper CLI fallback
  * - Extra tools: telegram_send, telegram_react, telegram_edit, telegram_poll, telegram_download
  * - Persistent access.json storage
  */
@@ -41,6 +43,13 @@ export interface TelegramConfig {
     downloadPath?: string;
     groupTrigger?: "mention" | "always" | "never";
     streamingUpdates?: boolean;
+    webhookPort?: number;
+    webhookHost?: string;
+    webhookPath?: string;
+    webhookUrl?: string;
+    webhookSecret?: string;
+    groqApiKey?: string;
+    whisperModel?: string;
 }
 export declare function parseConfig(): TelegramConfig;
 export declare function createTelegramChannel(config?: Partial<TelegramConfig>): Promise<{
