@@ -4,7 +4,8 @@
   "description": "SDK for building Claude Code channels with bidirectional chat, permission relay, and all 23 hook events",
   "bin": {
     "claude-hook": "./dist/hook-script.js",
-    "claude-channels": "./dist/setup.js"
+    "claude-channels": "./dist/setup.js",
+    "channels": "./dist/server.js"
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -72,10 +73,11 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.27.1",
+    "ws": "^8.18.0",
     "zod": "^4.3.6"
   },
   "peerDependencies": {
-    "grammy": "^1.0.0",
+    "grammy": "^1.36.0",
     "discord.js": "^14.0.0",
     "@slack/bolt": "^3.0.0",
     "@whiskeysockets/baileys": "^6.0.0",
@@ -98,6 +100,7 @@
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
+    "@types/ws": "^8.5.0",
     "typescript": "^5.5.0"
   },
   "engines": {
