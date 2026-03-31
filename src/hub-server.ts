@@ -161,15 +161,15 @@ export function installServer(Hub: typeof ChannelHub): void {
       res.writeHead(404); res.end("not found");
     });
 
-    await new Promise<void>((resolve, reject) => { httpServer.on("error", reject); httpServer.listen(p, "0.0.0.0", resolve); });
+    const bindHost = (this as any).opts?.host ?? "0.0.0.0";
+    await new Promise<void>((resolve, reject) => { httpServer.on("error", reject); httpServer.listen(p, bindHost, resolve); });
     const wss = new WebSocketServer({ server: httpServer });
     wss.on("connection", (ws: any, req: any) => (this as any).setupAgentConnection(ws, req.socket.remoteAddress ?? "unknown"));
 
     this.servers.set(`ws:${p}`, { type: "websocket", port: p, httpServer, wss });
-    process.stderr.write(`[${this.name}] HTTP+WS listening on :${p}\n`);
+    process.stderr.write(`[${this.name}] HTTP+WS listening on ${bindHost}:${p}\n`);
 
-    // Register HTTP endpoint too
-    await this.registerServer(`ws://localhost:${p}`, this.name, p).catch(() => {});
+    await this.registerServer(`ws://${bindHost}:${p}`, this.name, p).catch(() => {});
 
     const cleanup = async () => { await this.unregisterServer(p).catch(() => {}); };
     process.on("SIGINT", cleanup);

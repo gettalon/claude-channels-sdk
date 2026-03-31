@@ -172,13 +172,13 @@ export function installServer(Hub) {
             res.writeHead(404);
             res.end("not found");
         });
-        await new Promise((resolve, reject) => { httpServer.on("error", reject); httpServer.listen(p, "0.0.0.0", resolve); });
+        const bindHost = this.opts?.host ?? "0.0.0.0";
+        await new Promise((resolve, reject) => { httpServer.on("error", reject); httpServer.listen(p, bindHost, resolve); });
         const wss = new WebSocketServer({ server: httpServer });
         wss.on("connection", (ws, req) => this.setupAgentConnection(ws, req.socket.remoteAddress ?? "unknown"));
         this.servers.set(`ws:${p}`, { type: "websocket", port: p, httpServer, wss });
-        process.stderr.write(`[${this.name}] HTTP+WS listening on :${p}\n`);
-        // Register HTTP endpoint too
-        await this.registerServer(`ws://localhost:${p}`, this.name, p).catch(() => { });
+        process.stderr.write(`[${this.name}] HTTP+WS listening on ${bindHost}:${p}\n`);
+        await this.registerServer(`ws://${bindHost}:${p}`, this.name, p).catch(() => { });
         const cleanup = async () => { await this.unregisterServer(p).catch(() => { }); };
         process.on("SIGINT", cleanup);
         process.on("SIGTERM", cleanup);
