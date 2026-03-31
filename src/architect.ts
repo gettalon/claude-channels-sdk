@@ -349,8 +349,16 @@ export async function createArchitectServer(opts: ArchitectOptions = {}): Promis
     const { readFileSync: rfs, writeFileSync: wfs, mkdirSync: mks } = await import("node:fs");
     const { createConnection } = await import("node:net");
 
-    // Check if port is already in use by trying to connect
-    const portInUse = await new Promise<boolean>((resolve) => {
+    // Check if a hub server is already running — prefer Unix socket check (always present),
+    // fall back to TCP (only present when HTTP transport is enabled).
+    const socketPath = `/tmp/talon-${hub.defaultPort}.sock`;
+    const { existsSync } = await import("node:fs");
+    const socketInUse = existsSync(socketPath) && await new Promise<boolean>((resolve) => {
+      const sock = createConnection({ path: socketPath }, () => { sock.destroy(); resolve(true); });
+      sock.on("error", () => resolve(false));
+      sock.setTimeout(500, () => { sock.destroy(); resolve(false); });
+    });
+    const portInUse = socketInUse || await new Promise<boolean>((resolve) => {
       const sock = createConnection({ port: hub.defaultPort, host: "127.0.0.1" }, () => {
         sock.destroy();
         resolve(true);
@@ -360,8 +368,8 @@ export async function createArchitectServer(opts: ArchitectOptions = {}): Promis
     });
 
     if (portInUse) {
-      // Port is active — another architect is already serving; connect as client instead of killing it
-      process.stderr.write(`[${serverName}] Port ${hub.defaultPort} already in use — deferring to existing architect\n`);
+      // Hub is active — another architect is already serving; connect as client instead of killing it
+      process.stderr.write(`[${serverName}] Hub already running (${socketInUse ? "unix socket" : "port"} ${hub.defaultPort}) — deferring to existing architect\n`);
     } else {
       // Port is free — check if old PID is stale and clean up
       try {
