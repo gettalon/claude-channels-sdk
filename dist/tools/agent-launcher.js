@@ -469,10 +469,6 @@ ${Object.keys(opts.mcpServers ?? {}).map(s => `- ${s}`).join("\n") || "- talon-a
     // 4. Create async queue for streaming input
     const inputQueue = new AsyncQueue();
     const hasExistingSession = existsSync(join(dir, ".claude", "conversations"));
-    // Fresh agent needs a kickoff message with identity; continuing agent already has context
-    if (!hasExistingSession) {
-        inputQueue.push(textToUserMessage(identity));
-    }
     // 5. Resolve API provider config from ~/.talon/settings.json
     API_PROVIDERS = loadApiProviders();
     const resolvedProvider = {};
