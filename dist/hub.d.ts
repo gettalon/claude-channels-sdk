@@ -364,10 +364,11 @@ export declare class ChannelHub extends EventEmitter implements HubFacade {
     }) => void;
     startServer: (port?: number, opts?: {
         http?: boolean;
+        host?: string;
     }) => Promise<{
         port: number;
     }>;
-    /** @internal */ startHttpWs: (port: number) => Promise<void>;
+    /** @internal */ startHttpWs: (port: number, host?: string) => Promise<void>;
     /** @internal */ setupAgentConnection: (ws: any, addr: string) => void;
     /** @internal */ completeRegistration: (ws: any, addr: string, agentName: string, tools: AgentToolDef[], metadata: any, ref: {
         id: string | null;

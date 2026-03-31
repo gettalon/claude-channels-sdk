@@ -30,7 +30,7 @@ export function installServer(Hub: typeof ChannelHub): void {
    *
    * Returns { port, socketPath, http: boolean }.
    */
-  Hub.prototype.startServer = async function(this: ChannelHub, port?: number, opts?: { http?: boolean }): Promise<{ port: number }> {
+  Hub.prototype.startServer = async function(this: ChannelHub, port?: number, opts?: { http?: boolean; host?: string }): Promise<{ port: number }> {
     const p = port ?? this.defaultPort;
     if (this.servers.has(`unix:${p}`) || this.servers.has(`ws:${p}`)) return { port: p };
 
@@ -76,7 +76,7 @@ export function installServer(Hub: typeof ChannelHub): void {
 
     if (httpEnabled) {
       try {
-        await (this as any).startHttpWs(p);
+        await (this as any).startHttpWs(p, opts?.host);
       } catch (e: any) {
         process.stderr.write(`[${this.name}] HTTP+WS on :${p} failed: ${e?.code ?? e}\n`);
       }
@@ -133,7 +133,7 @@ export function installServer(Hub: typeof ChannelHub): void {
    * Start HTTP+WS listener on a port.
    * Can be called after initial Unix-only startup to add HTTP access.
    */
-  (Hub.prototype as any).startHttpWs = async function(this: ChannelHub, p: number): Promise<void> {
+  (Hub.prototype as any).startHttpWs = async function(this: ChannelHub, p: number, host?: string): Promise<void> {
     if (this.servers.has(`ws:${p}`)) return;
 
     const { WebSocketServer } = await import("ws");
@@ -161,7 +161,7 @@ export function installServer(Hub: typeof ChannelHub): void {
       res.writeHead(404); res.end("not found");
     });
 
-    const bindHost = (this as any).opts?.host ?? "0.0.0.0";
+    const bindHost = host ?? (this as any).opts?.host ?? "0.0.0.0";
     await new Promise<void>((resolve, reject) => { httpServer.on("error", reject); httpServer.listen(p, bindHost, resolve); });
     const wss = new WebSocketServer({ server: httpServer });
     wss.on("connection", (ws: any, req: any) => (this as any).setupAgentConnection(ws, req.socket.remoteAddress ?? "unknown"));

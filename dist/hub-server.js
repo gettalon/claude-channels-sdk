@@ -70,7 +70,7 @@ export function installServer(Hub) {
         const httpEnabled = opts?.http ?? hasWsServer;
         if (httpEnabled) {
             try {
-                await this.startHttpWs(p);
+                await this.startHttpWs(p, opts?.host);
             }
             catch (e) {
                 process.stderr.write(`[${this.name}] HTTP+WS on :${p} failed: ${e?.code ?? e}\n`);
@@ -140,7 +140,7 @@ export function installServer(Hub) {
      * Start HTTP+WS listener on a port.
      * Can be called after initial Unix-only startup to add HTTP access.
      */
-    Hub.prototype.startHttpWs = async function (p) {
+    Hub.prototype.startHttpWs = async function (p, host) {
         if (this.servers.has(`ws:${p}`))
             return;
         const { WebSocketServer } = await import("ws");
@@ -172,7 +172,7 @@ export function installServer(Hub) {
             res.writeHead(404);
             res.end("not found");
         });
-        const bindHost = this.opts?.host ?? "0.0.0.0";
+        const bindHost = host ?? this.opts?.host ?? "0.0.0.0";
         await new Promise((resolve, reject) => { httpServer.on("error", reject); httpServer.listen(p, bindHost, resolve); });
         const wss = new WebSocketServer({ server: httpServer });
         wss.on("connection", (ws, req) => this.setupAgentConnection(ws, req.socket.remoteAddress ?? "unknown"));

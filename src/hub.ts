@@ -480,8 +480,8 @@ export class ChannelHub extends EventEmitter implements HubFacade {
   /** @internal */ declare routeChat: (params: { chatId: string; content: string; from: string; source: "agent" | "channel"; senderAgentId?: string; sourceUrl?: string }) => void;
 
   // ── Server (delegated to hub-server.ts) ──────────────────────────────
-  declare startServer: (port?: number, opts?: { http?: boolean }) => Promise<{ port: number }>;
-  /** @internal */ declare startHttpWs: (port: number) => Promise<void>;
+  declare startServer: (port?: number, opts?: { http?: boolean; host?: string }) => Promise<{ port: number }>;
+  /** @internal */ declare startHttpWs: (port: number, host?: string) => Promise<void>;
   /** @internal */ declare setupAgentConnection: (ws: any, addr: string) => void;
   /** @internal */ declare completeRegistration: (ws: any, addr: string, agentName: string, tools: AgentToolDef[], metadata: any, ref: { id: string | null }) => void;
 

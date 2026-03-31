@@ -10,17 +10,19 @@ export const startServerTool: ToolDefinition = {
     type: "object",
     properties: {
       port: { type: "number", description: "Port to listen on (default: hub's defaultPort)" },
+      host: { type: "string", description: "Bind address (default: 127.0.0.1). Use 0.0.0.0 to accept external connections." },
     },
     required: [],
   },
   handle: async (args, ctx) => {
     const hub = ctx.hub;
     const port = (args.port as number | undefined) ?? hub.defaultPort;
+    const host = (args.host as string | undefined) ?? "127.0.0.1";
 
     // Register WS server entry in settings so autoSetup starts it on next boot
     const settings = await hub.loadSettings();
     const servers: any[] = (settings as any).servers ?? [];
-    const wsUrl = `ws://127.0.0.1:${port}`;
+    const wsUrl = `ws://${host}:${port}`;
     if (!servers.some((s: any) => s.url === wsUrl)) {
       servers.push({ url: wsUrl, name: hub.name, port, type: "ws" });
       (settings as any).servers = servers;
@@ -30,13 +32,13 @@ export const startServerTool: ToolDefinition = {
     // If unix already running, start HTTP+WS directly
     if (hub.hasServer(`unix:${port}`) && !hub.hasServer(`ws:${port}`)) {
       try {
-        await hub.startHttpWs(port);
-        return JSON.stringify({ port, ws: true });
+        await hub.startHttpWs(port, host);
+        return JSON.stringify({ port, host, ws: true });
       } catch (e: any) {
         return JSON.stringify({ error: e?.message ?? String(e) });
       }
     }
-    const result = await hub.startServer(port, { http: true });
+    const result = await hub.startServer(port, { http: true, host });
     return JSON.stringify(result, null, 2);
   },
 };
