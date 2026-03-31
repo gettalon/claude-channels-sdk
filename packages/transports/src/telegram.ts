@@ -17,8 +17,8 @@
  *   sendVenue, sendContact, sendPoll, sendMediaGroup, editMessageText,
  *   deleteMessage, answerCallbackQuery
  */
-import type { Transport, TransportAdapter, ConnectionHandler, MessageHandler, ProtocolMessage } from "../protocol.js";
-import { HubConfigService } from "../hub-config-service.js";
+import type { Transport, TransportAdapter, ConnectionHandler, MessageHandler, ProtocolMessage } from "@gettalon/protocol";
+import { HubConfigService } from "@gettalon/hub-runtime";
 
 const API = "https://api.telegram.org/bot";
 const COHERE_TRANSCRIBE_URL = "https://api.cohere.com/v2/audio/transcriptions";
@@ -592,9 +592,9 @@ export class TelegramAdapter implements TransportAdapter {
   private webhookRegistered = false;
 
   constructor(config: Record<string, unknown> = {}) {
-    this.token = (config.botToken as string) ?? HubConfigService.fromEnv().telegramBotToken() ?? "";
-    this.sendOnly = (config.sendOnly as boolean) ?? false;
     const _cfg = HubConfigService.fromEnv();
+    this.token = (config.botToken as string) ?? _cfg.telegramBotToken() ?? "";
+    this.sendOnly = (config.sendOnly as boolean) ?? false;
     this.cohereApiKey = (config.cohereApiKey as string) ?? _cfg.cohereApiKey();
     this.webhookUrl = (config.webhookUrl as string) ?? _cfg.telegramWebhookUrl();
     this.webhookPort = (config.webhookPort as number) ?? _cfg.telegramTransportWebhookPort();
