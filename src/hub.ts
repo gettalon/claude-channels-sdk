@@ -904,7 +904,21 @@ export class ChannelHub extends EventEmitter implements HubFacade {
       return false;
     }
 
-    // The process is orphaned (PPID = 1). Kill it.
+    // Final safety check: if the socket is still accepting connections, this is
+    // an active server (possibly from another Claude Code window) — don't kill it.
+    const socketPath = `/tmp/talon-${port}.sock`;
+    const socketAlive = await new Promise<boolean>((resolve) => {
+      const { createConnection } = require("node:net");
+      const sock = createConnection({ path: socketPath }, () => { sock.destroy(); resolve(true); });
+      sock.on("error", () => resolve(false));
+      setTimeout(() => { sock.destroy(); resolve(false); }, 500);
+    });
+    if (socketAlive) {
+      process.stderr.write(`[${this.name}] Socket ${socketPath} is still active — not killing PID ${orphanPid} (another session may be using it)\n`);
+      return false;
+    }
+
+    // The process is orphaned (PPID = 1) and socket is dead. Kill it.
     process.stderr.write(`[${this.name}] Killing orphan server process ${orphanPid} on port ${port}\n`);
     try {
       process.kill(orphanPid, "SIGTERM");
