@@ -53,7 +53,7 @@ export interface WebSocketConfig {
   mode: "server" | "client" | "both";
   /** Port to listen on (server mode) */
   port?: number;
-  /** Host to bind to (server mode, default "0.0.0.0") */
+  /** Host to bind to (server mode, default "127.0.0.1") */
   host?: string;
   /** URL to connect to (client mode, e.g. "ws://talon-host:8080") */
   url?: string;
@@ -131,7 +131,7 @@ export function parseConfig(): WebSocketConfig {
   return {
     mode,
     port: parseInt(process.env.WS_PORT ?? "8080", 10),
-    host: process.env.WS_HOST ?? "0.0.0.0",
+    host: process.env.WS_HOST ?? "127.0.0.1",
     url: process.env.WS_URL,
     agentName: process.env.WS_AGENT_NAME ?? `agent-${process.pid}`,
     pairToken: process.env.WS_PAIR_TOKEN,
@@ -679,7 +679,7 @@ export async function createWebSocketChannel(
     if (serverRunning) return;
     const { WebSocketServer } = await import("ws");
     const port = cfg.port ?? 8080;
-    const host = cfg.host ?? "0.0.0.0";
+    const host = cfg.host ?? "127.0.0.1";
 
     // Try to start server; if port is taken, fall back to client mode (reuse existing WS)
     try {
@@ -841,7 +841,7 @@ export async function createWebSocketChannel(
 
     currentMode = newMode;
     process.stderr.write(`[ws-channel] Mode switched: ${oldMode} → ${newMode}\n`);
-    return `Mode switched from "${oldMode}" to "${newMode}"${needsServer ? ` (server on ${cfg.host ?? "0.0.0.0"}:${cfg.port ?? 8080})` : ""}${needsClient && clientUrl ? ` (client → ${clientUrl})` : ""}`;
+    return `Mode switched from "${oldMode}" to "${newMode}"${needsServer ? ` (server on ${cfg.host ?? "127.0.0.1"}:${cfg.port ?? 8080})` : ""}${needsClient && clientUrl ? ` (client → ${clientUrl})` : ""}`;
   }
 
   // ── Initial startup based on configured mode ──────────────────────────────
@@ -884,7 +884,8 @@ export async function createWebSocketChannel(
   if (meshRegistry) {
     const port = cfg.port ?? 8080;
     await meshRegistry.setup().catch(() => {});
-    meshRegistry.startReporting({ lan: [{ ip: "0.0.0.0", port }] });
+    const reportHost = cfg.host ?? "127.0.0.1";
+    meshRegistry.startReporting({ lan: [{ ip: reportHost, port }] });
 
     // Fetch registry peers and connect
     const registryPeers = await meshRegistry.getPeers().catch(() => [] as DiscoveredPeer[]);
@@ -1029,8 +1030,8 @@ export async function createWebSocketChannel(
       groupInvites.set(code, invite);
 
       const port = cfg.port ?? 8080;
-      const host = cfg.host ?? "0.0.0.0";
-      const wsUrl = `ws://${host === "0.0.0.0" ? "localhost" : host}:${port}`;
+      const host = cfg.host ?? "127.0.0.1";
+      const wsUrl = `ws://${host}:${port}`;
       const link = `${wsUrl}?invite=${code}`;
 
       process.stderr.write(`[ws-channel] Invite created: ${code} (${t}${invite.expiresAt ? `, expires ${new Date(invite.expiresAt).toISOString()}` : ", no expiry"})\n`);

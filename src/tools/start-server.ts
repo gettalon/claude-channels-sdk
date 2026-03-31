@@ -15,22 +15,22 @@ export const startServerTool: ToolDefinition = {
   },
   handle: async (args, ctx) => {
     const hub = ctx.hub;
-    const port = (args.port as number | undefined) ?? (hub as any).defaultPort;
+    const port = (args.port as number | undefined) ?? hub.defaultPort;
 
     // Register WS server entry in settings so autoSetup starts it on next boot
     const settings = await hub.loadSettings();
     const servers: any[] = (settings as any).servers ?? [];
-    const wsUrl = `ws://0.0.0.0:${port}`;
+    const wsUrl = `ws://127.0.0.1:${port}`;
     if (!servers.some((s: any) => s.url === wsUrl)) {
-      servers.push({ url: wsUrl, name: (hub as any).name, port, type: "ws" });
+      servers.push({ url: wsUrl, name: hub.name, port, type: "ws" });
       (settings as any).servers = servers;
       await hub.saveSettings(settings);
     }
 
     // If unix already running, start HTTP+WS directly
-    if ((hub as any).servers?.has(`unix:${port}`) && !(hub as any).servers?.has(`ws:${port}`)) {
+    if (hub.hasServer(`unix:${port}`) && !hub.hasServer(`ws:${port}`)) {
       try {
-        await (hub as any).startHttpWs(port);
+        await hub.startHttpWs(port);
         return JSON.stringify({ port, ws: true });
       } catch (e: any) {
         return JSON.stringify({ error: e?.message ?? String(e) });
