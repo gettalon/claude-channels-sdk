@@ -96,7 +96,11 @@ export class HubConfigService {
         const cwd = process.cwd();
         const isTempDir = /\/(tmp|temp|var\/folders)\//i.test(cwd) || cwd.includes("dispatch-");
         const cwdName = isTempDir ? null : basename(cwd);
-        return cwdName ?? "talon";
+        // Append short PID-based suffix so multiple sessions from the same directory
+        // don't collide on the hub (same name triggers ws.close() on the old connection).
+        const base = cwdName ?? "talon";
+        const suffix = process.pid.toString(36).slice(-4);
+        return `${base}-${suffix}`;
     }
     /** Resolved port: code option > env > default 9090. */
     port(codeOption) {
