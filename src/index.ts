@@ -68,3 +68,41 @@ export { BLOCKING_EVENTS } from "./types.js";
 
 // Built-in transports — core helpers kept at root
 export { createUnixTransport, createWebSocketTransport, createStdioTransport } from "./transports/index.js";
+
+// Hub — primary class and types (also available via @gettalon/channels-sdk/hub)
+export { ChannelHub } from "./hub.js";
+export type { AgentState, PendingAgent, HubSettings, HubOptions, HubHookEvent, HubHookFn, ShellCommandHook, UpdateInfo, ContactEntry, ContactChannel } from "./hub.js";
+
+// Architect — agent MCP server helper
+export { createAgentMcpServer } from "./architect.js";
+export type { AgentMcpOptions } from "./architect.js";
+
+// Agent config (tools layer)
+export { loadAgentConfig, saveAgentConfig, listAgentConfigs, deleteAgentConfig } from "./agent-config.js";
+export type { AgentConfig } from "./types.js";
+
+// Mesh — E2E encryption and peer discovery utilities
+export {
+  generateIdentityKeyPair,
+  loadOrCreateIdentity,
+  deriveSharedSecret,
+  E2eSession,
+  SenderKeySession,
+  MeshDiscovery,
+  MeshRegistry,
+  deriveMeshId,
+  generateMeshSecret,
+  createMeshJwt,
+  verifyMeshJwt,
+  deriveEncryptionKey,
+  parseMeshConfig,
+} from "./mesh.js";
+export type {
+  MeshConfig,
+  MeshJwtPayload,
+  EncryptedPayload,
+  DiscoveredPeer,
+  SenderKeyBundle,
+  SenderKeyDistribution,
+  SenderKeyEncryptedMessage,
+} from "./mesh.js";
