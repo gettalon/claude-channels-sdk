@@ -111,7 +111,7 @@ export class HubServerRuntime {
       hub._pruneTimer = setInterval(() => {
         const now = Date.now();
         for (const [id, a] of hub.agents) {
-          if (now - a.lastHeartbeat > 90000) { a.ws.close(); hub.agents.delete(id); }
+          if (now - a.lastHeartbeat > 90000) { a.ws.close(); hub.unregisterAgent(id); }
         }
       }, 30000);
     }
