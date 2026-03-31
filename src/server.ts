@@ -31,6 +31,7 @@
  */
 
 import { ChannelServer } from "./channel-server.js";
+import { HubConfigService } from "./hub-config-service.js";
 import type {
   HookEventInput,
   HookEventName,
@@ -39,7 +40,8 @@ import type {
 
 // ─── Transport Selection ─────────────────────────────────────────────────────
 
-const transport = (process.env.TALON_TRANSPORT ?? "stdio").toLowerCase();
+const cfg = HubConfigService.fromEnv();
+const transport = cfg.talonTransport();
 
 // ─── Platform Channels ───────────────────────────────────────────────────────
 
@@ -54,7 +56,7 @@ const PLATFORM_CHANNELS = [
 
 async function main(): Promise<void> {
   // Platform adapter mode (TALON_CHANNEL=telegram, etc.)
-  const platformChannel = process.env.TALON_CHANNEL?.toLowerCase();
+  const platformChannel = cfg.talonChannel();
   if (platformChannel && PLATFORM_CHANNELS.includes(platformChannel as any)) {
     await startPlatformChannel(platformChannel);
     return;
@@ -107,41 +109,41 @@ async function startStdio(): Promise<void> {
 async function startWebSocket(): Promise<void> {
   const { createWebSocketChannel } = await import("./channels/websocket.js");
 
-  const groupName = process.env.WS_GROUP_NAME;
-  const groupAccess = (process.env.WS_GROUP_ACCESS ?? "public") as "public" | "private" | "invite";
-  const maxMembers = parseInt(process.env.WS_GROUP_MAX_MEMBERS ?? "0", 10);
+  const groupName = cfg.wsGroupName();
+  const groupAccess = cfg.wsGroupAccess();
+  const maxMembers = cfg.wsGroupMaxMembers();
 
-  const { channel, cleanup, agents } = await createWebSocketChannel({
-    mode: (process.env.WS_MODE ?? "both") as "server" | "client" | "both",
-    port: parseInt(process.env.WS_PORT ?? "8080", 10),
-    host: process.env.WS_HOST ?? "0.0.0.0",
-    url: process.env.WS_URL,
-    agentName: process.env.WS_AGENT_NAME,
-    pairToken: process.env.WS_PAIR_TOKEN,
-    autoReconnect: process.env.WS_AUTO_RECONNECT !== "false",
-    httpEnabled: process.env.WS_HTTP !== "false",
+  const { channel, cleanup } = await createWebSocketChannel({
+    mode: cfg.wsMode() as "server" | "client" | "both",
+    port: cfg.wsPort(),
+    host: cfg.wsHost(),
+    url: cfg.wsUrl(),
+    agentName: cfg.wsAgentName(),
+    pairToken: cfg.wsPairToken(),
+    autoReconnect: cfg.wsAutoReconnect(),
+    httpEnabled: cfg.wsHttpEnabled(),
     group: groupName ? { name: groupName, access: groupAccess, maxMembers: maxMembers || undefined } : undefined,
-    mesh: process.env.MESH_SECRET ? {
-      meshSecret: process.env.MESH_SECRET,
-      deviceId: process.env.MESH_DEVICE_ID,
-      agentName: process.env.WS_AGENT_NAME,
-      port: parseInt(process.env.WS_PORT ?? "8080", 10),
-      mdns: process.env.MESH_MDNS !== "false",
-      registryUrl: process.env.MESH_REGISTRY_URL,
-      e2e: process.env.MESH_E2E === "true",
+    mesh: cfg.meshSecret() ? {
+      meshSecret: cfg.meshSecret()!,
+      deviceId: cfg.meshDeviceId(),
+      agentName: cfg.wsAgentName(),
+      port: cfg.wsPort(),
+      mdns: cfg.meshMdns(),
+      registryUrl: cfg.meshRegistryUrl(),
+      e2e: cfg.meshE2e(),
     } : undefined,
   });
 
   await channel.start();
 
-  const mode = process.env.WS_MODE ?? "both";
-  const port = process.env.WS_PORT ?? "8080";
+  const mode = cfg.wsMode();
+  const port = cfg.wsPort();
   const features = [
     `mode=${mode}`,
     `port=${port}`,
     groupName ? `group=${groupName}(${groupAccess})` : null,
-    process.env.MESH_SECRET ? "mesh" : null,
-    process.env.MESH_E2E === "true" ? "e2e" : null,
+    cfg.meshSecret() ? "mesh" : null,
+    cfg.meshE2e() ? "e2e" : null,
   ].filter(Boolean).join(", ");
 
   process.stderr.write(`[channels] Ready (ws+http+stdio MCP) [${features}]\n`);
