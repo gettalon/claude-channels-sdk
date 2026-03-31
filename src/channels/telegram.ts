@@ -21,6 +21,7 @@
 
 import { ChannelServer } from "../channel-server.js";
 import type { ChannelPermissionRequest, ChannelServerOptions } from "../types.js";
+import { HubConfigService } from "../hub-config-service.js";
 
 export type PairingMode = "pairing" | "open" | "disabled";
 
@@ -168,27 +169,25 @@ class TelegramApiError extends Error {
 }
 
 export function parseConfig(): TelegramConfig {
-  const botToken = process.env.TELEGRAM_BOT_TOKEN ?? "";
-  if (!botToken) {
-    throw new Error("TELEGRAM_BOT_TOKEN is required");
-  }
+  const cfg = HubConfigService.fromEnv();
+  const botToken = cfg.telegramBotToken();
+  if (!botToken) throw new Error("TELEGRAM_BOT_TOKEN is required");
 
-  const allowedChats = process.env.TELEGRAM_ALLOWED_CHATS
-    ?.split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
-
-  const accessPath = process.env.TELEGRAM_ACCESS_PATH;
-  const downloadPath = process.env.TELEGRAM_DOWNLOAD_PATH;
-  const groupTrigger = (process.env.TELEGRAM_GROUP_TRIGGER as TelegramConfig["groupTrigger"]) ?? "mention";
-  const streamingUpdates = process.env.TELEGRAM_STREAMING !== "false";
-  const webhookPort = parseInt(process.env.TELEGRAM_WEBHOOK_PORT ?? "3000", 10);
-  const webhookHost = process.env.TELEGRAM_WEBHOOK_HOST ?? "0.0.0.0";
-  const webhookPath = process.env.TELEGRAM_WEBHOOK_PATH ?? "/webhook";
-  const webhookUrl = process.env.TELEGRAM_WEBHOOK_URL;
-  const webhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
-  const groqApiKey = process.env.TELEGRAM_GROQ_API_KEY ?? process.env.GROQ_API_KEY;
-  const whisperModel = process.env.TELEGRAM_WHISPER_MODEL ?? "base";
+  const allowedChatsRaw = cfg.telegramAllowedChats();
+  const allowedChats = allowedChatsRaw
+    ? allowedChatsRaw.split(",").map((s) => s.trim()).filter(Boolean)
+    : undefined;
+  const accessPath = cfg.telegramAccessPath();
+  const downloadPath = cfg.telegramDownloadPath();
+  const groupTrigger = cfg.telegramGroupTrigger() as TelegramConfig["groupTrigger"];
+  const streamingUpdates = cfg.telegramStreaming();
+  const webhookPort = cfg.telegramWebhookPort();
+  const webhookHost = cfg.telegramWebhookHost();
+  const webhookPath = cfg.telegramWebhookPath();
+  const webhookUrl = cfg.telegramWebhookUrl();
+  const webhookSecret = cfg.telegramWebhookSecret();
+  const groqApiKey = cfg.groqApiKey();
+  const whisperModel = cfg.telegramWhisperModel();
 
   return {
     botToken,
@@ -432,7 +431,7 @@ export async function createTelegramChannel(
   const accessPath = cfg.accessPath ?? join(homedir(), ".claude", "channels", "telegram", "access.json");
   const downloadDir = cfg.downloadPath ?? join(tmpdir(), "talon-telegram-downloads");
   const webhookPort = cfg.webhookPort ?? 3000;
-  const webhookHost = cfg.webhookHost ?? "0.0.0.0";
+  const webhookHost = cfg.webhookHost ?? "127.0.0.1";
   const webhookPath = normalizeWebhookPath(cfg.webhookPath);
   const webhookSecret = cfg.webhookSecret;
 
@@ -893,7 +892,7 @@ export async function createTelegramChannel(
     streamingStatus.delete(chatId);
   }
 
-  const agentName = process.env.TALON_AGENT_NAME;
+  const agentName = HubConfigService.fromEnv().envAgentName;
   const channel = new ChannelServer({
     name: "telegram",
     version: "1.1.0",
