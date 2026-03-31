@@ -254,9 +254,9 @@ export function installClient(Hub: typeof ChannelHub): void {
       name,
       heartbeatTimer,
     } as any);
-    // Use adapter's display name if available (e.g. @BotUsername for Telegram)
-    // Then resolve alias from settings.json { aliases: { "@BotName": "Home Claude" } }
-    const rawDisplayName = (adapter as any).displayName ?? name;
+    // Prefer the user-configured name; fall back to adapter's display name (e.g. @BotUsername for Telegram)
+    // Then resolve alias from settings.json { aliases: { "@BotName": "arc" } }
+    const rawDisplayName = name ?? (adapter as any).displayName;
     const aliases = (settings as any).aliases as Record<string, string> | undefined;
     const displayName = aliases?.[rawDisplayName] ?? rawDisplayName;
     const storedClient = this.clients.get(storeUrl);
