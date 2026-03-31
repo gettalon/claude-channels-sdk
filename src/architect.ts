@@ -103,7 +103,8 @@ export async function createArchitectServer(opts: ArchitectOptions = {}): Promis
   // Gate: don't send notifications until MCP client has completed handshake
   let mcpReady = false;
   const pendingNotifications: Array<{ method: string; params: any }> = [];
-  mcp.oninitialized = () => {
+  const flushPending = () => {
+    if (mcpReady) return;
     mcpReady = true;
     process.stderr.write(`[${serverName}] MCP handshake complete — flushing ${pendingNotifications.length} buffered notifications\n`);
     for (const n of pendingNotifications) {
@@ -111,6 +112,21 @@ export async function createArchitectServer(opts: ArchitectOptions = {}): Promis
     }
     pendingNotifications.length = 0;
   };
+  mcp.oninitialized = () => {
+    if (mcpReady) {
+      // Reconnect — send current status so user knows hub is alive
+      const channels = hub.clients ? [...hub.clients.values()].map((c: any) => c.name ?? c.id).join(", ") : "";
+      const statusMsg = channels ? `Hub reconnected · ${channels}` : `Hub reconnected (${hub.isClient() ? "client mode" : "active"})`;
+      mcp.notification({
+        method: "notifications/claude/channel",
+        params: { content: statusMsg, meta: { user: "system", source: serverName, type: "system" } },
+      }).catch(() => {});
+      return;
+    }
+    flushPending();
+  };
+  // Fallback: flush after 3s in case client never sends notifications/initialized
+  setTimeout(flushPending, 3000);
   const notify = (method: string, params: any) => {
     if (!mcpReady) {
       process.stderr.write(`[${serverName}] BUFFER notification (MCP not ready): ${method}\n`);
@@ -253,7 +269,9 @@ export async function createArchitectServer(opts: ArchitectOptions = {}): Promis
         meta: { user: "system", source: serverName, type: "system" },
       });
     } else {
-      initParts.push(`${name} via ${transport}`);
+      // For unix/ws connections to a hub daemon, show "hub" label instead of random agent ID
+      const isHubConn = (transport === "unix" || transport === "websocket") && !url.startsWith("telegram://");
+      initParts.push(isHubConn ? `hub via ${transport}` : `${name} via ${transport}`);
     }
   });
 
@@ -379,6 +397,7 @@ export async function createArchitectServer(opts: ArchitectOptions = {}): Promis
   // Now safe to start hub (notifications go through MCP transport properly)
   hub.autoSetup().then(() => {
     initDone = true;
+    const isClientOnly = hub.isClient();
     if (initParts.length > 0) {
       const full = initParts.join(" · ");
       const content = full.length > 120
@@ -386,6 +405,12 @@ export async function createArchitectServer(opts: ArchitectOptions = {}): Promis
         : `Ready: ${full}`;
       notify("notifications/claude/channel", {
         content,
+        meta: { user: "system", source: serverName, type: "system" },
+      });
+    } else if (isClientOnly) {
+      // Client mode but connect() failed silently — still notify so user knows state
+      notify("notifications/claude/channel", {
+        content: `Connected to hub (client mode, port ${hub.defaultPort})`,
         meta: { user: "system", source: serverName, type: "system" },
       });
     }

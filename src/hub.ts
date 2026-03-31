@@ -1069,11 +1069,14 @@ export class ChannelHub extends EventEmitter {
     const telegramEntries = toArray(transports.telegram).filter(e => e.enabled !== false);
     for (const entry of telegramEntries) {
       const connName = (entry.name as string) ?? "telegram";
-      const connUrl = `telegram://${connName}`;
+      const token = (entry.botToken as string) ?? process.env.TELEGRAM_BOT_TOKEN;
+      // Use stable URL keyed by token suffix so multiple bots don't collide,
+      // but don't embed the display name — that changes without creating a new bot.
+      const tokenKey = token ? token.split(":")[0] : "bot";
+      const connUrl = `telegram://${tokenKey}`;
       const alreadyConnected = existingConnections?.some(c => c.url === connUrl)
         || [...this.clients.keys()].some(k => k === connUrl);
       if (!alreadyConnected) {
-        const token = (entry.botToken as string) ?? process.env.TELEGRAM_BOT_TOKEN;
         if (token) {
           try { await this.connect(connUrl, connName, { ...entry, botToken: token }); } catch {}
         }

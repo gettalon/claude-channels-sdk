@@ -205,13 +205,13 @@ export function installRouting(Hub) {
             this.wsSend(agent.ws, { type: "reply", chat_id: resolved, text, from: myName, ...rich });
             return { ok: true };
         }
-        const replyPayload = { type: "reply", chat_id: resolved, content: text, text, from: myName, ...rich };
         // UUID fast path: if chatId was a UUID with a known sourceUrl, route directly to that client
         const targetEntry = this.findTarget(chatId);
         if (targetEntry?.sourceUrl) {
             const sourceClient = this.clients.get(targetEntry.sourceUrl);
             if (sourceClient) {
                 process.stderr.write(`[${this.name}] reply: UUID route -> ${targetEntry.sourceUrl}\n`);
+                const replyPayload = { type: "reply", chat_id: resolved, content: text, text, from: sourceClient.name ?? myName, ...rich };
                 this.wsSendAsync(sourceClient.ws, replyPayload);
                 return { ok: true };
             }
@@ -220,6 +220,7 @@ export function installRouting(Hub) {
         const knownChannel = this.channelForChat.get(chatId) ?? this.channelForChat.get(resolved);
         if (knownChannel) {
             process.stderr.write(`[${this.name}] reply: sending to channelForChat ${knownChannel.transport}:${knownChannel.url}\n`);
+            const replyPayload = { type: "reply", chat_id: resolved, content: text, text, from: knownChannel.name ?? myName, ...rich };
             this.wsSendAsync(knownChannel.ws, replyPayload);
             return { ok: true };
         }
@@ -227,6 +228,7 @@ export function installRouting(Hub) {
         for (const [, client] of this.clients) {
             if (client.channelId?.includes(resolved) || client.url?.includes(resolved)) {
                 process.stderr.write(`[${this.name}] reply: sending to matched client ${client.transport}:${client.url}\n`);
+                const replyPayload = { type: "reply", chat_id: resolved, content: text, text, from: client.name ?? myName, ...rich };
                 this.wsSendAsync(client.ws, replyPayload);
                 return { ok: true };
             }
@@ -236,6 +238,7 @@ export function installRouting(Hub) {
         for (const [, client] of this.clients) {
             if (client.role === "channel") {
                 process.stderr.write(`[${this.name}] reply: sending to channel client ${client.transport}:${client.url}\n`);
+                const replyPayload = { type: "reply", chat_id: resolved, content: text, text, from: client.name ?? myName, ...rich };
                 this.wsSendAsync(client.ws, replyPayload);
                 return { ok: true };
             }
