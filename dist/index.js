@@ -13,7 +13,7 @@ export { createUnixTransport, createWebSocketTransport, createStdioTransport } f
 // Hub — primary class and types (also available via @gettalon/channels-sdk/hub)
 export { ChannelHub } from "./hub.js";
 // Architect — agent MCP server helper
-export { createAgentMcpServer } from "./architect.js";
+export { createAgentMcpServer, createArchitectServer } from "./architect.js";
 // Agent config (tools layer)
 export { loadAgentConfig, saveAgentConfig, listAgentConfigs, deleteAgentConfig } from "./agent-config.js";
 // Mesh — E2E encryption and peer discovery utilities

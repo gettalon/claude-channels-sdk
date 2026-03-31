@@ -74,8 +74,8 @@ export { ChannelHub } from "./hub.js";
 export type { AgentState, PendingAgent, HubSettings, HubOptions, HubHookEvent, HubHookFn, ShellCommandHook, UpdateInfo, ContactEntry, ContactChannel } from "./hub.js";
 
 // Architect — agent MCP server helper
-export { createAgentMcpServer } from "./architect.js";
-export type { AgentMcpOptions } from "./architect.js";
+export { createAgentMcpServer, createArchitectServer } from "./architect.js";
+export type { AgentMcpOptions, ArchitectOptions } from "./architect.js";
 
 // Agent config (tools layer)
 export { loadAgentConfig, saveAgentConfig, listAgentConfigs, deleteAgentConfig } from "./agent-config.js";

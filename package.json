@@ -1,6 +1,6 @@
 {
   "name": "@gettalon/channels-sdk",
-  "version": "1.1.20",
+  "version": "1.1.21",
   "description": "SDK for building Claude Code channels with bidirectional chat, permission relay, and all 23 hook events",
   "bin": {
     "talon": "./dist/cli.js",
@@ -12,7 +12,9 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "type": "module",
-  "workspaces": ["packages/*"],
+  "workspaces": [
+    "packages/*"
+  ],
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
