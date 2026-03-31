@@ -393,6 +393,8 @@ export async function createArchitectServer(opts = {}) {
     // Connect MCP transport FIRST — autoSetup event handlers emit notifications
     // via stdout, which corrupts the handshake if MCP isn't ready yet.
     await mcp.connect(new StdioServerTransport());
+    // Exit when stdin closes (parent Claude process died) — prevents orphan daemons
+    process.stdin.on("close", () => process.exit(0));
     // Now safe to start hub (notifications go through MCP transport properly)
     hub.autoSetup().then(() => {
         initDone = true;
@@ -475,6 +477,7 @@ export async function createAgentMcpServer(opts = {}) {
     });
     // No autoSetup — just connect MCP transport
     await mcp.connect(new StdioServerTransport());
+    process.stdin.on("close", () => process.exit(0));
     return mcp;
 }
 //# sourceMappingURL=architect.js.map
