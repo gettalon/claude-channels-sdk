@@ -114,9 +114,19 @@ export async function createArchitectServer(opts: ArchitectOptions = {}): Promis
   };
   mcp.oninitialized = () => {
     if (mcpReady) {
-      // Reconnect — send current status so user knows hub is alive
-      const channels = hub.clients ? [...hub.clients.values()].map((c: any) => c.name ?? c.id).join(", ") : "";
-      const statusMsg = channels ? `Hub reconnected · ${channels}` : `Hub reconnected (${hub.isClient() ? "client mode" : "active"})`;
+      // Reconnect — send current status using same Ready:/Client: format
+      const isClientOnly = hub.isClient();
+      const prefix = isClientOnly ? "Client" : "Ready";
+      const parts: string[] = [];
+      if (!isClientOnly) {
+        for (const [, srv] of (hub as any).servers ?? new Map()) {
+          if (srv.type === "websocket") parts.push(`Server :${srv.port}`);
+        }
+      }
+      for (const c of (hub.clients ? [...hub.clients.values()] : []) as any[]) {
+        if (c.channel && c.channel !== "unix") parts.push(`${c.name ?? c.id} via ${c.channel}`);
+      }
+      const statusMsg = parts.length ? `${prefix}: ${parts.join(" · ")}` : `${prefix}: reconnected`;
       mcp.notification({
         method: "notifications/claude/channel",
         params: { content: statusMsg, meta: { user: "system", source: serverName, type: "system" } },
