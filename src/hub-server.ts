@@ -68,15 +68,11 @@ export function installServer(Hub: typeof ChannelHub): void {
     process.stderr.write(`[${this.name}] Unix socket listening at ${socketPath}\n`);
 
     // ── 2) HTTP+WS ───────────────────────────────────────────────────────
-    // New-style: enabled when transports.ws has at least one { enabled: true } entry
-    // Legacy-style: enabled when server.http is not explicitly false (backward compat)
+    // Enabled when: opts.http === true, OR settings.servers has a ws/http entry for this port
     const settings = await this.loadSettings();
-    const wsTransports = (settings as any).transports?.ws;
-    const httpEnabled = opts?.http ?? (
-      wsTransports !== undefined
-        ? (Array.isArray(wsTransports) ? wsTransports.some((e: any) => e.enabled === true) : !!(wsTransports as any).enabled)
-        : (settings as any).server?.http !== false
-    );
+    const registeredServers: any[] = (settings as any).servers ?? [];
+    const hasWsServer = registeredServers.some((s: any) => s.port === p && (s.type === "ws" || s.type === "http" || s.url?.startsWith("ws://") || s.url?.startsWith("http://")));
+    const httpEnabled = opts?.http ?? hasWsServer;
 
     if (httpEnabled) {
       try {
@@ -230,7 +226,7 @@ export function installServer(Hub: typeof ChannelHub): void {
 
         // Check approval requirement
         const settings = await this.loadSettings();
-        const requireApproval = settings.access?.requireApproval === true;
+        const requireApproval = settings.access?.requireApproval !== false;
 
         if (requireApproval) {
           const allowlist = settings.access?.allowlist ?? [];

@@ -281,7 +281,7 @@ export async function createArchitectServer(opts: ArchitectOptions = {}): Promis
 
   hub.on("approvalRequired", ({ code, name, address, tools }) => {
     notify("notifications/claude/channel", {
-      content: `Agent "${name}" from ${address} requires approval. Pairing code: ${code}. Tools: ${tools.join(", ") || "none"}. Use "edge approve ${code}" or "edge deny ${code}".`,
+      content: `Agent "${name}" from ${address} requires approval. Pairing code: ${code}. Tools: ${tools.join(", ") || "none"}. Use "talon approve ${code}" or "talon deny ${code}".`,
       meta: { user: "system", source: serverName, type: "system" },
     });
   });
