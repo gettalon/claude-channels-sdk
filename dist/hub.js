@@ -9,7 +9,7 @@
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { homedir, hostname } from "node:os";
 import { createHash } from "node:crypto";
-import { join, basename } from "node:path";
+import { join } from "node:path";
 import { EventEmitter } from "node:events";
 import { loadAgentConfig, saveAgentConfig, listAgentConfigs } from "./agent-config.js";
 import { getTalonHome } from "./hub-settings.js";
@@ -100,7 +100,7 @@ export class ChannelHub extends EventEmitter {
         super();
         this.startedAt = Date.now();
         this.opts = opts;
-        this.name = opts.name ?? process.env.TALON_AGENT_NAME ?? basename(process.cwd()) ?? "talon";
+        this.name = opts.name ?? process.env.TALON_AGENT_NAME ?? "talon";
         this.defaultPort = opts.port ?? (process.env.TALON_PORT ? parseInt(process.env.TALON_PORT, 10) : 9090);
         this.clientTools = opts.clientTools ?? [];
         this._hooksEnabled = opts.hooksEnabled !== false;

@@ -264,7 +264,7 @@ export class ChannelHub extends EventEmitter {
     super();
     this.startedAt = Date.now();
     this.opts = opts;
-    this.name = opts.name ?? process.env.TALON_AGENT_NAME ?? basename(process.cwd()) ?? "talon";
+    this.name = opts.name ?? process.env.TALON_AGENT_NAME ?? "talon";
     this.defaultPort = opts.port ?? (process.env.TALON_PORT ? parseInt(process.env.TALON_PORT, 10) : 9090);
     this.clientTools = opts.clientTools ?? [];
     (this as any)._hooksEnabled = opts.hooksEnabled !== false;
