@@ -295,12 +295,12 @@ export async function createArchitectServer(opts: ArchitectOptions = {}): Promis
 
   hub.on("approvalGranted", ({ agentId, url, info }) => {
     const agents: any[] = info?.agents ?? [];
-    const serverName2: string = info?.server_name ?? url;
+    const remoteServerName: string = info?.server_name ?? url;
     const agentSummary = agents.length
       ? `Agents: ${agents.map((a: any) => a.name).join(", ")}`
       : "No agents connected";
     notify("notifications/claude/channel", {
-      content: `Connected to hub "${serverName2}". ${agentSummary}.`,
+      content: `Connected to hub "${remoteServerName}". ${agentSummary}.`,
       meta: { user: "system", source: serverName, type: "system" },
     });
   });
@@ -433,18 +433,18 @@ export async function createArchitectServer(opts: ArchitectOptions = {}): Promis
     initDone = true;
     const isClientOnly = hub.isClient();
     if (initParts.length > 0) {
+      const prefix = isClientOnly ? "Client" : "Ready";
       const full = initParts.join(" · ");
       const content = full.length > 120
-        ? `Ready: ${initParts.length} connections (${initParts.slice(0, 3).join(", ")}${initParts.length > 3 ? `, +${initParts.length - 3} more` : ""})`
-        : `Ready: ${full}`;
+        ? `${prefix}: ${initParts.length} connections (${initParts.slice(0, 3).join(", ")}${initParts.length > 3 ? `, +${initParts.length - 3} more` : ""})`
+        : `${prefix}: ${full}`;
       notify("notifications/claude/channel", {
         content,
         meta: { user: "system", source: serverName, type: "system" },
       });
     } else if (isClientOnly) {
-      // Client mode but connect() failed silently — still notify so user knows state
       notify("notifications/claude/channel", {
-        content: `Connected to hub (client mode, port ${hub.defaultPort})`,
+        content: `Client: connecting to port ${hub.defaultPort}…`,
         meta: { user: "system", source: serverName, type: "system" },
       });
     }
