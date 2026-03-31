@@ -197,14 +197,8 @@ export function installRouting(Hub: typeof ChannelHub): void {
       (this as any).wsSendAsync(knownChannel.ws, { type: "chat", chat_id: resolved, content, from: myName, ...rich });
       return { ok: true };
     }
-    // Try any channel client
-    for (const [, client] of this.clients) {
-      if (client.role === "channel") {
-        (this as any).wsSendAsync(client.ws, { type: "chat", chat_id: resolved, content, from: myName, ...rich });
-        return { ok: true };
-      }
-    }
-    // Proxy to all connected hub peers — each will deliver if it has the target agent locally
+    // Proxy to connected hub peers first — they may have this agent locally
+    // (must come before channel fallback to avoid misrouting agent UUIDs to channels like Telegram)
     const hubPeers = [...this.clients.values()].filter(c => c.role === "server");
     if (hubPeers.length > 0) {
       const msgId = (rich as any)?.msgId ?? randomUUID();
@@ -212,6 +206,13 @@ export function installRouting(Hub: typeof ChannelHub): void {
         this.wsSend(peer.ws, { type: "chat", target: resolved, content, from: myName, ...rich, msgId });
       }
       return { ok: true };
+    }
+    // Try any channel client (last resort — for channel targets without a known route)
+    for (const [, client] of this.clients) {
+      if (client.role === "channel") {
+        (this as any).wsSendAsync(client.ws, { type: "chat", chat_id: resolved, content, from: myName, ...rich });
+        return { ok: true };
+      }
     }
     // Buffer message for offline agent — it will be flushed when the agent connects
     // Use agent name as buffer key (not ID) so flushBufferedMessages(agentName) can find it
@@ -259,6 +260,15 @@ export function installRouting(Hub: typeof ChannelHub): void {
         return { ok: true };
       }
     }
+    // Proxy to connected hub peers before falling back to channel clients
+    const hubPeers = [...this.clients.values()].filter(c => c.role === "server");
+    if (hubPeers.length > 0) {
+      const msgId = (rich as any)?.msgId ?? randomUUID();
+      for (const peer of hubPeers) {
+        this.wsSend(peer.ws, { type: "chat", chat_id: resolved, target: resolved, content: text, from: myName, ...rich, msgId });
+      }
+      return { ok: true };
+    }
     // Try any channel client whose transport might reach this chatId
     // (e.g. Telegram bot can send to any chatId via the same bot token)
     for (const [, client] of this.clients) {
@@ -268,15 +278,6 @@ export function installRouting(Hub: typeof ChannelHub): void {
         (this as any).wsSendAsync(client.ws, replyPayload);
         return { ok: true };
       }
-    }
-    // Proxy to all connected hub peers — each will deliver if it has the target agent locally
-    const hubPeers = [...this.clients.values()].filter(c => c.role === "server");
-    if (hubPeers.length > 0) {
-      const msgId = (rich as any)?.msgId ?? randomUUID();
-      for (const peer of hubPeers) {
-        this.wsSend(peer.ws, { type: "chat", chat_id: resolved, target: resolved, content: text, from: myName, ...rich, msgId });
-      }
-      return { ok: true };
     }
     return { ok: false, error: "No route" };
   };
