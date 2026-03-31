@@ -7,17 +7,29 @@ export function installClient(Hub) {
     Hub.prototype.connect = async function (url, agentName, connectionConfig) {
         await ensureMachineId();
         const name = agentName ?? this.opts.agentName ?? process.env.TALON_AGENT_NAME ?? this.name ?? randomAgentName();
-        if (this.clients.has(url))
-            return;
         // Also check if a resolved form of this URL is already connected
         // (prevents auto://, ws://localhost, unix:// duplicates to the same hub)
         const port = this.extractPort?.(url);
-        if (port) {
-            const aliases = [`auto://localhost:${port}`, `ws://localhost:${port}`, `unix:///tmp/talon-${port}.sock`];
-            for (const alias of aliases) {
-                if (alias !== url && this.clients.has(alias))
-                    return;
+        const findExisting = () => {
+            if (this.clients.has(url))
+                return this.clients.get(url);
+            if (port) {
+                const aliases = [`auto://localhost:${port}`, `ws://localhost:${port}`, `unix:///tmp/talon-${port}.sock`];
+                for (const alias of aliases) {
+                    if (alias !== url && this.clients.has(alias))
+                        return this.clients.get(alias);
+                }
             }
+            return undefined;
+        };
+        const existing = findExisting();
+        if (existing) {
+            // Already connected — resend register to get a fresh register_ack with updated discovery info
+            try {
+                existing.ws.send(JSON.stringify({ type: "register", agent_name: name, tools: this.clientTools }));
+            }
+            catch { }
+            return;
         }
         let transportType = this.detectTransport(url);
         const preferLocal = this.opts.preferLocalIpc !== false; // default true

@@ -14,15 +14,24 @@ export function installClient(Hub: typeof ChannelHub): void {
   Hub.prototype.connect = async function(this: ChannelHub, url: string, agentName?: string, connectionConfig?: Record<string, unknown>): Promise<void> {
     await ensureMachineId();
     const name = agentName ?? (this as any).opts.agentName ?? process.env.TALON_AGENT_NAME ?? (this as any).name ?? randomAgentName();
-    if (this.clients.has(url)) return;
     // Also check if a resolved form of this URL is already connected
     // (prevents auto://, ws://localhost, unix:// duplicates to the same hub)
     const port = (this as any).extractPort?.(url);
-    if (port) {
-      const aliases = [`auto://localhost:${port}`, `ws://localhost:${port}`, `unix:///tmp/talon-${port}.sock`];
-      for (const alias of aliases) {
-        if (alias !== url && this.clients.has(alias)) return;
+    const findExisting = () => {
+      if (this.clients.has(url)) return this.clients.get(url);
+      if (port) {
+        const aliases = [`auto://localhost:${port}`, `ws://localhost:${port}`, `unix:///tmp/talon-${port}.sock`];
+        for (const alias of aliases) {
+          if (alias !== url && this.clients.has(alias)) return this.clients.get(alias);
+        }
       }
+      return undefined;
+    };
+    const existing = findExisting();
+    if (existing) {
+      // Already connected — resend register to get a fresh register_ack with updated discovery info
+      try { existing.ws.send(JSON.stringify({ type: "register", agent_name: name, tools: (this as any).clientTools })); } catch {}
+      return;
     }
 
     let transportType = this.detectTransport(url);
