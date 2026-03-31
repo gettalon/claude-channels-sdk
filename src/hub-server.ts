@@ -230,15 +230,17 @@ export function installServer(Hub: typeof ChannelHub): void {
 
         if (requireApproval) {
           const allowlist = settings.access?.allowlist ?? [];
+          // Normalize IPv6-mapped IPv4 addresses (e.g. ::ffff:172.18.0.1 → 172.18.0.1)
+          const normalizedAddr = addr.replace(/^::ffff:/, "");
           // Local connections (same machine) are always trusted — they bypass approval
-          const isLocal = (addr === "127.0.0.1" || addr === "::1" || addr === "::ffff:127.0.0.1" || addr === "localhost" || addr === "unix:local") && !(settings.access as any)?.forceApprovalAll;
+          const isLocal = (normalizedAddr === "127.0.0.1" || addr === "::1" || addr === "localhost" || addr === "unix:local") && !(settings.access as any)?.forceApprovalAll;
           const isAllowed = isLocal || allowlist.some((entry: string) => {
-            // Exact match
-            if (entry === agentName || entry === addr) return true;
-            // Wildcard/glob match: "unix:*", "telegram:*", "agent-*"
+            // Exact match (try both raw and normalized addr)
+            if (entry === agentName || entry === addr || entry === normalizedAddr) return true;
+            // Wildcard/glob match: "172.18.*", "agent-*", etc.
             if (entry.includes("*")) {
               const pattern = new RegExp("^" + entry.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*") + "$");
-              return pattern.test(agentName) || pattern.test(addr);
+              return pattern.test(agentName) || pattern.test(addr) || pattern.test(normalizedAddr);
             }
             // Prefix match: "unix:" matches all unix connections
             if (entry.endsWith(":") && addr.startsWith(entry)) return true;
@@ -282,8 +284,11 @@ export function installServer(Hub: typeof ChannelHub): void {
         // If a specific target agent is named and no chatRoute applies, send directly
         if (msg.target && !this.chatRoutes.has(chatId)) {
           const target = this.findAgent(msg.target);
-          if (target) this.wsSend(target.ws, { type: "chat", chat_id: chatId, content, from: fromName, ...(msg.msgId ? { msgId: msg.msgId } : {}) });
-          return;
+          if (target) {
+            this.wsSend(target.ws, { type: "chat", chat_id: chatId, content, from: fromName, ...(msg.msgId ? { msgId: msg.msgId } : {}) });
+            return;
+          }
+          // Target not found (hub itself or unknown) — fall through to routeChat so hub receives it
         }
 
         this.routeChat({ chatId, content, from: fromName, source: "agent", senderAgentId: ref.id ?? undefined });
@@ -577,10 +582,14 @@ export function installServer(Hub: typeof ChannelHub): void {
     const canSeeAll = allowedAgentNames.size === 0; // empty = no restriction
 
     // Filter agents: show those the client is allowed to contact (excludes self)
-    const visibleAgents = [...this.agents.values()]
-      .filter(a => a.id !== id)
-      .filter(a => canSeeAll || allowedAgentNames.has(a.name) || allowedAgentNames.has(a.id))
-      .map(a => ({ id: a.id, name: a.name, tools: a.tools?.map((t: any) => t.name) }));
+    // Always include the hub itself so remote clients have at least one addressable target
+    const visibleAgents = [
+      { id: "hub", name: this.name, tools: [] as string[] },
+      ...[...this.agents.values()]
+        .filter(a => a.id !== id)
+        .filter(a => canSeeAll || allowedAgentNames.has(a.name) || allowedAgentNames.has(a.id))
+        .map(a => ({ id: a.id, name: a.name, tools: a.tools?.map((t: any) => t.name) })),
+    ];
 
     // Filter groups: show groups the client is a member of
     const visibleGroups = [...this.groups.entries()]
