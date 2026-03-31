@@ -55,7 +55,14 @@ export function installRouting(Hub) {
     Hub.prototype.findTarget = function (nameOrUuid) {
         const key = nameOrUuid.toLowerCase();
         const uuid = this.targetNameIndex.get(key) ?? (this.targetRegistry.has(nameOrUuid) ? nameOrUuid : null);
-        return uuid ? this.targetRegistry.get(uuid) : undefined;
+        if (uuid)
+            return this.targetRegistry.get(uuid);
+        // Also resolve raw agent IDs from this.agents (list_agents returns these)
+        if (this.agents.has(nameOrUuid)) {
+            const agent = this.agents.get(nameOrUuid);
+            return { uuid: nameOrUuid, name: agent.name, channelType: "agent", rawId: nameOrUuid, kind: "agent" };
+        }
+        return undefined;
     };
     /** Get the display name for a chat_id. Returns the target name if registered, else original. */
     Hub.prototype.displayName = function (chatId) {

@@ -11,7 +11,7 @@ async function readAgentMetaSafe(name) {
         return {};
     }
 }
-export const edgeCliTool = {
+export const talonCliTool = {
     name: "talon",
     description: "CLI: status, ls (agents+channels), connect, send, call, register, reload, server, discover, daemon, approve, deny, pending, handover, release, routes, health, group, contacts, contact, version, update, launch, stop",
     inputSchema: { type: "object", properties: { command: { type: "string" } }, required: ["command"] },
@@ -283,4 +283,4 @@ export const edgeCliTool = {
         return JSON.stringify({ error: `Unknown: ${action}. Try: status, ls, channels, connect, send, call, register, reload, server, discover, daemon, approve, deny, pending, handover, release, routes, health, group, contacts, contact, version, update, launch, stop` });
     },
 };
-//# sourceMappingURL=edge-cli.js.map
+//# sourceMappingURL=talon-cli.js.map

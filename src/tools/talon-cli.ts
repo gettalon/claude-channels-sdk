@@ -11,9 +11,9 @@ async function readAgentMetaSafe(name: string): Promise<any> {
   } catch { return {}; }
 }
 
-export const edgeCliTool: ToolDefinition = {
-  name: "edge",
-  description: "CLI: status, ls (agents+channels), connect, send, reply, call, register, reload, server, discover, daemon, approve, deny, pending, handover, release, routes, health, group, contacts, contact, version, update, launch, stop",
+export const talonCliTool: ToolDefinition = {
+  name: "talon",
+  description: "CLI: status, ls (agents+channels), connect, send, call, register, reload, server, discover, daemon, approve, deny, pending, handover, release, routes, health, group, contacts, contact, version, update, launch, stop",
   inputSchema: { type: "object", properties: { command: { type: "string" } }, required: ["command"] },
   handle: async (args, ctx) => {
     const cmd = (args.command as string).trim();
@@ -144,6 +144,6 @@ export const edgeCliTool: ToolDefinition = {
       if (!info.updateAvailable) return JSON.stringify({ updated: false, currentVersion: info.currentVersion, message: "Already on the latest version." });
       return JSON.stringify({ updated: false, currentVersion: info.currentVersion, latestVersion: info.latestVersion, message: "Update failed. Check stderr for details." });
     }
-    return JSON.stringify({ error: `Unknown: ${action}. Try: status, ls, channels, connect, send, reply, call, register, reload, server, discover, daemon, approve, deny, pending, handover, release, routes, health, group, contacts, contact, version, update, launch, stop` });
+    return JSON.stringify({ error: `Unknown: ${action}. Try: status, ls, channels, connect, send, call, register, reload, server, discover, daemon, approve, deny, pending, handover, release, routes, health, group, contacts, contact, version, update, launch, stop` });
   },
 };

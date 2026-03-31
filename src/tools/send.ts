@@ -1,28 +1,30 @@
 /**
- * send tool — Send a message to a target by UUID.
- * For human-friendly addressing (name, channel, chat ID), use reply instead.
+ * send tool — Universal send/reply. Accepts name, channel, agent, chat ID, or UUID.
+ * Replaces the former reply tool — handles all addressing modes in one place.
  */
 import type { ToolDefinition } from "./types.js";
-import { sendToAgent } from "./agent-launcher.js";
 
 export const sendTool: ToolDefinition = {
   name: "send",
-  description: "Send a message to a target by UUID. Use reply for name/channel/chat-ID addressing.",
+  description: "Send a message to a target UUID (from targets tool).",
   inputSchema: {
     type: "object",
     properties: {
-      target: { type: "string", description: "Target UUID." },
+      target: { type: "string", description: "Target UUID (from targets tool)" },
       text: { type: "string", description: "Message text" },
-      format: { type: "string", description: "Message format (e.g. markdown, plain)" },
+      format: { type: "string", enum: ["text", "markdown", "html"], description: "Message format" },
       files: {
         type: "array",
         items: {
           type: "object",
           properties: {
             name: { type: "string" },
-            url: { type: "string" },
+            path: { type: "string" },
             data: { type: "string" },
+            url: { type: "string" },
+            mime: { type: "string" },
           },
+          required: ["name"],
         },
         description: "File attachments",
       },
@@ -33,7 +35,9 @@ export const sendTool: ToolDefinition = {
           properties: {
             text: { type: "string" },
             action: { type: "string" },
+            url: { type: "string" },
           },
+          required: ["text"],
         },
         description: "Interactive buttons",
       },
@@ -53,29 +57,23 @@ export const sendTool: ToolDefinition = {
     if (args.buttons) rich.buttons = args.buttons;
     if (args.reply_to) rich.reply_to = args.reply_to;
     if (args.tts) rich.meta = { tts: "true", tts_voice: args.tts_voice };
-    const content = Object.keys(rich).length ? JSON.stringify({ text, ...rich }) : text;
+    const richOpts = Object.keys(rich).length ? rich as any : undefined;
+    const content = richOpts ? JSON.stringify({ text, ...rich }) : text;
 
     // Resolve UUID via target registry
     const found = (ctx.hub as any).findTarget?.(target);
-    if (found) {
-      const rawId = found.rawId;
-      if (found.kind === "agent") {
-        const r = ctx.hub.sendMessage(rawId, content);
-        return r.ok
-          ? JSON.stringify({ sent: true, target, resolved: found.name, kind: "agent", uuid: found.uuid })
-          : JSON.stringify(r);
-      }
-      const r = ctx.hub.reply(rawId, content);
+    if (!found) return JSON.stringify({ sent: false, error: `UUID "${target}" not found. Use targets tool to list available UUIDs.` });
+
+    const rawId = found.rawId;
+    if (found.kind === "agent") {
+      const r = ctx.hub.sendMessage(rawId, content);
       return r.ok
-        ? JSON.stringify({ sent: true, target, resolved: found.name, kind: found.kind, uuid: found.uuid })
+        ? JSON.stringify({ sent: true, target, resolved: found.name, kind: "agent" })
         : JSON.stringify(r);
     }
-
-    // Try persistent agent
-    const persistent = sendToAgent(target, text);
-    if (persistent.sent) return JSON.stringify({ sent: true, target, via: "persistent_agent" });
-
-    // Not found — report error
-    return JSON.stringify({ sent: false, error: `UUID "${target}" not found. Use targets tool to list available UUIDs.` });
+    const r = ctx.hub.reply(rawId, text, richOpts);
+    return r.ok
+      ? JSON.stringify({ sent: true, target, resolved: found.name, kind: found.kind })
+      : JSON.stringify(r);
   },
 };

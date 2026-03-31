@@ -36,6 +36,10 @@ export const targetsTool = {
                 });
             }
         }
+        // Add connected agents (addressable by their raw UUID from list_agents)
+        for (const [id, agent] of hub.agents) {
+            targets.push({ uuid: id, name: agent.name, kind: "agent", channelType: "agent" });
+        }
         // Add local connections with their remote targets
         const connections = settings.connections ?? [];
         const connTargets = connections
