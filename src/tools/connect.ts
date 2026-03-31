@@ -20,20 +20,46 @@ export const connectTool: ToolDefinition = {
     const url = args.url as string;
     const name = args.name as string | undefined;
     const config = args.config as Record<string, unknown> | undefined;
-    await ctx.hub.connect(url, name, config);
-    // Return cached remote info if available (may be set by the connect handler)
-    const settings = await ctx.hub.loadSettings();
-    // The connect() method resolves URLs (e.g. auto:// -> unix://), so match
-    // by port extracted from the original URL against stored connections
-    const port = url.match(/:(\d+)/)?.[1];
-    const conn = (settings.connections ?? []).find((c: any) => {
-      if (c.url === url) return true;
-      if (port && c.url?.includes(port)) return true;
-      if (name && c.name === name) return true;
-      return false;
+
+    // Wait for register_ack (approvalGranted/Denied/Pending) before reading remoteInfo.
+    // hub.connect() resolves after the WS handshake but before register_ack arrives.
+    let remoteInfo: unknown;
+    const ackPromise = new Promise<void>((resolve) => {
+      const onGranted = (ev: any) => {
+        if (ev.url === url || ev.url?.includes(url.match(/:(\d+)/)?.[1] ?? "\x00")) {
+          remoteInfo = ev.info;
+          ctx.hub.off("approvalGranted", onGranted);
+          ctx.hub.off("approvalPending", onPending);
+          ctx.hub.off("approvalDenied", onDenied);
+          resolve();
+        }
+      };
+      const onPending = (ev: any) => { onGranted(ev); };
+      const onDenied = (ev: any) => { onGranted(ev); };
+      ctx.hub.on("approvalGranted", onGranted);
+      ctx.hub.on("approvalPending", onPending);
+      ctx.hub.on("approvalDenied", onDenied);
     });
+
+    await ctx.hub.connect(url, name, config);
+    // Wait up to 3s for register_ack
+    await Promise.race([ackPromise, new Promise<void>(r => setTimeout(r, 3000))]);
+
+    // Fall back to settings.json if event didn't fire (e.g. already connected)
+    if (!remoteInfo) {
+      const settings = await ctx.hub.loadSettings();
+      const port = url.match(/:(\d+)/)?.[1];
+      const conn = (settings.connections ?? []).find((c: any) => {
+        if (c.url === url) return true;
+        if (port && c.url?.includes(port)) return true;
+        if (name && c.name === name) return true;
+        return false;
+      });
+      remoteInfo = conn?.remoteInfo;
+    }
+
     const result: Record<string, unknown> = { status: "connected", url };
-    if (conn?.remoteInfo) result.remote = conn.remoteInfo;
+    if (remoteInfo) result.remote = remoteInfo;
     return JSON.stringify(result, null, 2);
   },
 };
