@@ -101,8 +101,8 @@ export class HubServerRuntime {
     // Guard against stacking signal handlers on repeated startServer calls
     if (!hub._serverCleanupRegistered) {
       hub._serverCleanupRegistered = true;
-      process.on("SIGINT", cleanup);
-      process.on("SIGTERM", cleanup);
+      process.on("SIGINT", () => cleanup().then(() => process.exit(0)));
+      process.on("SIGTERM", () => cleanup().then(() => process.exit(0)));
       process.on("exit", () => { try { unlinkSync(socketPath); } catch {} try { unlinkSync(daemonPidFile); } catch {} hub.unregisterServer(p).catch(() => {}); });
     }
 
@@ -113,14 +113,14 @@ export class HubServerRuntime {
         for (const [id, a] of hub.agents) {
           if (now - a.lastHeartbeat > 90000) { a.ws.close(); hub.unregisterAgent(id); }
         }
-      }, 30000);
+      }, 30000).unref();
     }
 
     // Evict expired seen msgIds every 60s
     if (!hub._seenEvictTimer) {
       hub._seenEvictTimer = setInterval(() => {
         hub.evictSeenMessages();
-      }, 60_000);
+      }, 60_000).unref();
     }
 
     hub.emit("serverStarted", { port: p, socketPath, http: httpEnabled });
