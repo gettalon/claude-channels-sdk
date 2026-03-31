@@ -6,7 +6,7 @@
  *   - A dedicated folder: ~/.talon/agents/<name>/
  *   - A CLAUDE.md with identity instructions
  *   - A persistent query() session with streaming input (AsyncQueue)
- *   - MCP config pointing to the talon-architect server
+ *   - MCP config pointing to the talon-hub server
  *   - In-memory tracking via runningAgents map
  *
  * Routing modes:
@@ -306,8 +306,7 @@ function resolveMcpServerPath(): string {
   // Falls back to server.js (full architect) if agent-server.js not found
   const serverNames = ["agent-server.js", "server.js"];
   const cacheRoots = [
-    join(homedir(), ".claude", "plugins", "cache", "talon-private-plugins", "talon-architect"),
-    join(homedir(), ".claude", "plugins", "cache", "talon-private-plugins", "talon-edge-agent"),
+    join(homedir(), ".claude", "plugins", "cache", "gettalon", "talon-plugins", "talon-hub"),
   ];
   for (const root of cacheRoots) {
     if (!existsSync(root)) continue;
@@ -343,8 +342,9 @@ function resolveMcpServerPath(): string {
     ".claude",
     "plugins",
     "cache",
-    "talon-private-plugins",
-    "talon-architect",
+    "gettalon",
+    "talon-plugins",
+    "talon-hub",
     "0.4.0",
     "mcp-server",
     "agent-server.js",
@@ -356,8 +356,7 @@ export function cleanupStaleVersions(): { removed: string[]; kept: string } {
   const removed: string[] = [];
   let kept = "";
   const cacheRoots = [
-    join(homedir(), ".claude", "plugins", "cache", "talon-private-plugins", "talon-architect"),
-    join(homedir(), ".claude", "plugins", "cache", "talon-private-plugins", "talon-edge-agent"),
+    join(homedir(), ".claude", "plugins", "cache", "gettalon", "talon-plugins", "talon-hub"),
   ];
   for (const root of cacheRoots) {
     if (!existsSync(root)) continue;
@@ -403,7 +402,7 @@ Working Directory: {{folder}}
 - SILENT MODE: Do NOT send progress messages. No "reading file", "now implementing", "let me check" messages.
 - ONLY send messages for: final result, errors that block you, or questions that need human input.
 - ONE message per task: a short summary when done. Not one message per step.
-- Use talon-architect MCP tools (reply, send, call_tool) to communicate.
+- Use talon-hub MCP tools (reply, send, call_tool) to communicate.
 
 ## 3) Engineering Principles (Mandatory)
 
@@ -494,7 +493,7 @@ export async function launchAgent(
   const dir = await ensureAgentDir(name);
 
   // 2. Write CLAUDE.md from agent.smith.md template or defaults
-  const identity = opts.prompt ?? `You are the "${name}" agent. You have persistent memory via --continue. Use the talon-architect MCP tools to communicate with other agents and channels.`;
+  const identity = opts.prompt ?? `You are the "${name}" agent. You have persistent memory via --continue. Use the talon-hub MCP tools to communicate with other agents and channels.`;
   const modeDesc = mode === "direct" ? "You have your own Telegram bot token for direct channel access." : "You route through the master hub.";
 
   let claudeMd: string;
@@ -562,14 +561,14 @@ export async function launchAgent(
 - Base: ${(opts.tools ?? []).join(", ") || "default"}
 
 ## MCP Servers
-${Object.keys(opts.mcpServers ?? {}).map(s => `- ${s}`).join("\n") || "- talon-architect (default)"}
+${Object.keys(opts.mcpServers ?? {}).map(s => `- ${s}`).join("\n") || "- talon-hub (default)"}
 `;
   await writeFile(join(dir, "agent.md"), agentMd);
 
   // 3. Build MCP server config
   const mcpServerPath = resolveMcpServerPath();
   const mcpServers: Record<string, McpServerConfig> = {
-    "talon-architect": {
+    "talon-hub": {
       type: "stdio",
       command: "node",
       args: [mcpServerPath],

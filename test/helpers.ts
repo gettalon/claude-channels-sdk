@@ -7,7 +7,10 @@ import { tmpdir } from "node:os";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 
-let portCounter = 19100;
+// Each vitest worker gets a separate port range to avoid cross-worker conflicts.
+// VITEST_WORKER_ID is 1-based; we space workers 300 ports apart.
+const workerId = Number(process.env.VITEST_WORKER_ID ?? "1");
+let portCounter = 19100 + (workerId - 1) * 300;
 
 /** Get a unique port for each test to avoid EADDRINUSE. */
 export function nextPort(): number {

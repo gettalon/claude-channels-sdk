@@ -31,17 +31,19 @@ function checkAgentAuth(hub, senderAgentId, targetAgentId) {
 }
 /** Install routing methods onto the ChannelHub prototype. */
 export function installRouting(Hub) {
-    /** Generate a deterministic UUID from (channelType, rawId) pair — stable across restarts. */
-    function targetUuid(channelType, rawId) {
-        return createHash("sha256").update(`${channelType}:${rawId}`).digest("hex").slice(0, 12);
+    /** Generate a deterministic UUID from (channelType, rawId[, sourceUrl]) — stable across restarts.
+     *  sourceUrl disambiguates same rawId across multiple bots/channels. */
+    function targetUuid(channelType, rawId, sourceUrl) {
+        const key = sourceUrl ? `${channelType}:${rawId}:${sourceUrl}` : `${channelType}:${rawId}`;
+        return createHash("sha256").update(key).digest("hex").slice(0, 12);
     }
     /**
      * Register or update a target in the unified registry.
-     * Returns the target's UUID. If a target with same (channelType, rawId) exists, updates name/kind.
+     * Returns the target's UUID. sourceUrl scopes the UUID to a specific bot/channel connection.
      */
-    Hub.prototype.registerTarget = function (name, channelType, rawId, kind) {
-        const uuid = targetUuid(channelType, rawId);
-        const entry = { uuid, name, channelType, rawId, kind };
+    Hub.prototype.registerTarget = function (name, channelType, rawId, kind, sourceUrl) {
+        const uuid = targetUuid(channelType, rawId, sourceUrl);
+        const entry = { uuid, name, channelType, rawId, kind, ...(sourceUrl ? { sourceUrl } : {}) };
         this.targetRegistry.set(uuid, entry);
         // Index by name for fast lookup (last write wins if names collide)
         this.targetNameIndex.set(name.toLowerCase(), uuid);
@@ -203,9 +205,19 @@ export function installRouting(Hub) {
             this.wsSend(agent.ws, { type: "reply", chat_id: resolved, text, from: myName, ...rich });
             return { ok: true };
         }
-        // Try the known originating channel for this chatId first
         const replyPayload = { type: "reply", chat_id: resolved, content: text, text, from: myName, ...rich };
-        const knownChannel = this.channelForChat.get(resolved);
+        // UUID fast path: if chatId was a UUID with a known sourceUrl, route directly to that client
+        const targetEntry = this.findTarget(chatId);
+        if (targetEntry?.sourceUrl) {
+            const sourceClient = this.clients.get(targetEntry.sourceUrl);
+            if (sourceClient) {
+                process.stderr.write(`[${this.name}] reply: UUID route -> ${targetEntry.sourceUrl}\n`);
+                this.wsSendAsync(sourceClient.ws, replyPayload);
+                return { ok: true };
+            }
+        }
+        // Try the known originating channel for this chatId (keyed by UUID or rawId)
+        const knownChannel = this.channelForChat.get(chatId) ?? this.channelForChat.get(resolved);
         if (knownChannel) {
             process.stderr.write(`[${this.name}] reply: sending to channelForChat ${knownChannel.transport}:${knownChannel.url}\n`);
             this.wsSendAsync(knownChannel.ws, replyPayload);
@@ -252,7 +264,7 @@ export function installRouting(Hub) {
      *   6. broadcast — emit to host
      */
     Hub.prototype.routeChat = function (params) {
-        const { chatId, from, source, senderAgentId } = params;
+        const { chatId, from, source, senderAgentId, sourceUrl } = params;
         let content = params.content;
         if (from && chatId) {
             const channelType = source === "channel"
@@ -262,7 +274,10 @@ export function installRouting(Hub) {
         }
         // Track originating channel client for this chatId so replies can route back
         if (source === "channel" && chatId && !this.channelForChat.has(chatId)) {
-            const channelClient = [...this.clients.values()].find(c => c.role === "channel");
+            // Use sourceUrl for precise match when multiple channels are connected (many-to-many)
+            const channelClient = (sourceUrl ? this.clients.get(sourceUrl) : undefined)
+                ?? [...this.clients.values()].find(c => c.role === "channel" && (!sourceUrl || c.url === sourceUrl))
+                ?? [...this.clients.values()].find(c => c.role === "channel");
             if (channelClient)
                 this.channelForChat.set(chatId, channelClient);
         }
@@ -303,7 +318,7 @@ export function installRouting(Hub) {
                 // Auto-handover so replies go back through the originating channel
                 if (!this.chatRoutes.has(chatId)) {
                     this.chatRoutes.set(chatId, targetAgent.id);
-                    const channelClient = this.channelForChat.get(chatId) ?? [...this.clients.values()].find(c => c.role === "channel");
+                    const channelClient = this.channelForChat.get(chatId) ?? (sourceUrl ? this.clients.get(sourceUrl) : undefined) ?? [...this.clients.values()].find(c => c.role === "channel");
                     if (channelClient)
                         this.channelForChat.set(chatId, channelClient);
                 }

@@ -298,7 +298,7 @@ async function runWorker(): Promise<void> {
 
 const PLIST_LABEL = "com.talon.architect";
 const PLIST_PATH = join(homedir(), "Library", "LaunchAgents", `${PLIST_LABEL}.plist`);
-const SYSTEMD_PATH = join(homedir(), ".config", "systemd", "user", "talon-architect.service");
+const SYSTEMD_PATH = join(homedir(), ".config", "systemd", "user", "talon-hub.service");
 
 export async function daemonEnable(): Promise<{ enabled: boolean; path: string; error?: string }> {
   const thisFile = fileURLToPath(import.meta.url);
@@ -356,8 +356,8 @@ WantedBy=default.target`;
       await writeFile(SYSTEMD_PATH, unit);
       const { execSync } = await import("node:child_process");
       execSync("systemctl --user daemon-reload");
-      execSync("systemctl --user enable talon-architect");
-      execSync("systemctl --user start talon-architect");
+      execSync("systemctl --user enable talon-hub");
+      execSync("systemctl --user start talon-hub");
       return { enabled: true, path: SYSTEMD_PATH };
     } catch (e) { return { enabled: false, path: SYSTEMD_PATH, error: String(e) }; }
   }
@@ -371,8 +371,8 @@ export async function daemonDisable(): Promise<{ disabled: boolean; error?: stri
       await unlink(PLIST_PATH).catch(() => {});
     } else {
       const { execSync } = await import("node:child_process");
-      execSync("systemctl --user stop talon-architect 2>/dev/null || true");
-      execSync("systemctl --user disable talon-architect 2>/dev/null || true");
+      execSync("systemctl --user stop talon-hub 2>/dev/null || true");
+      execSync("systemctl --user disable talon-hub 2>/dev/null || true");
       await unlink(SYSTEMD_PATH).catch(() => {});
     }
     await daemonStop();

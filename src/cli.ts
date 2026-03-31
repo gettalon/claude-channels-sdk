@@ -53,8 +53,8 @@ const BACKENDS: Record<string, BackendDef> = {
   },
   claude: {
     command: "claude",
-    defaultArgs: ["--dangerously-skip-permissions", "--dangerously-load-development-channels", "plugin:talon-architect@talon-private-plugins"],
-    promptArg: (p) => ["--dangerously-skip-permissions", "--dangerously-load-development-channels", "plugin:talon-architect@talon-private-plugins", "-p", p],
+    defaultArgs: ["--dangerously-skip-permissions", "--dangerously-load-development-channels", "plugin:talon-hub@gettalon/talon-plugins"],
+    promptArg: (p) => ["--dangerously-skip-permissions", "--dangerously-load-development-channels", "plugin:talon-hub@gettalon/talon-plugins", "-p", p],
     interactive: true,
   },
   gemini: {
@@ -158,8 +158,7 @@ function compareVersionsDesc(a: string, b: string): number {
 
 function resolveCachedPluginServerPath(): string | null {
   const cacheRoots = [
-    join(homedir(), ".claude", "plugins", "cache", "talon-private-plugins", "talon-architect"),
-    join(homedir(), ".claude", "plugins", "cache", "talon-private-plugins", "talon-edge-agent"),
+    join(homedir(), ".claude", "plugins", "cache", "gettalon", "talon-plugins", "talon-hub"),
   ];
 
   for (const root of cacheRoots) {
@@ -234,7 +233,7 @@ async function main(): Promise<void> {
   const mcpConfigPath = join(tmpdir(), `talon-${backend}-mcp.json`);
   writeFileSync(mcpConfigPath, JSON.stringify({
     mcpServers: {
-      "talon-architect": {
+      "talon-hub": {
         command: "node",
         args: [mcpServerPath]
       }

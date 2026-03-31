@@ -754,6 +754,11 @@ export class ChannelHub extends EventEmitter {
         await this.loadAgentConfigs();
         // Read port from settings if not set in opts
         const settings = await this.loadSettings();
+        // First-time init: write default transports (unix only — no HTTP+WS until explicitly enabled)
+        if (!settings.transports && Object.keys(settings).length === 0) {
+            settings.transports = { unix: [{ enabled: true }], ws: [], telegram: [] };
+            await this.saveSettings({ transports: settings.transports });
+        }
         const port = this.opts.port ?? settings.port ?? this.defaultPort;
         // Auto-start server
         let isClient = false;
@@ -838,18 +843,8 @@ export class ChannelHub extends EventEmitter {
                         }
                     }
                 }
-                // Auto-connect Telegram if token is available (env var or settings) but no saved connection exists
-                const hasTelegramConn = connections?.some(c => c.url.startsWith("telegram://"))
-                    || [...this.clients.keys()].some(k => k.startsWith("telegram://"));
-                if (!hasTelegramConn) {
-                    const tgToken = process.env.TELEGRAM_BOT_TOKEN ?? settings.transports?.telegram?.botToken;
-                    if (tgToken) {
-                        try {
-                            await this.connect("telegram://bot", "telegram");
-                        }
-                        catch { }
-                    }
-                }
+                // Auto-connect all enabled transports from settings
+                await this.autoConnectTransports(settings, connections);
             }
             catch { }
         }
@@ -873,6 +868,58 @@ export class ChannelHub extends EventEmitter {
         // Only in dev mode — production should not self-mutate
         if (this.opts.devMode || process.env.TALON_DEV === "1") {
             this.startFileWatcher();
+        }
+    }
+    /** Start all enabled transports from settings.transports (many-to-many support). */
+    async autoConnectTransports(settings, existingConnections) {
+        const transports = settings.transports ?? {};
+        // Normalize a transport entry to an array (supports both single-object and array forms)
+        const toArray = (val) => {
+            if (!val)
+                return [];
+            if (Array.isArray(val))
+                return val;
+            return [val];
+        };
+        // ── Telegram (supports multiple bots) ──────────────────────────────
+        const telegramEntries = toArray(transports.telegram).filter(e => e.enabled !== false);
+        for (const entry of telegramEntries) {
+            const connName = entry.name ?? "telegram";
+            const connUrl = `telegram://${connName}`;
+            const alreadyConnected = existingConnections?.some(c => c.url === connUrl)
+                || [...this.clients.keys()].some(k => k === connUrl);
+            if (!alreadyConnected) {
+                const token = entry.botToken ?? process.env.TELEGRAM_BOT_TOKEN;
+                if (token) {
+                    try {
+                        await this.connect(connUrl, connName, { ...entry, botToken: token });
+                    }
+                    catch { }
+                }
+            }
+        }
+        // Env-var fallback: no transports.telegram config defined at all
+        if (telegramEntries.length === 0) {
+            const hasTgConn = existingConnections?.some(c => c.url.startsWith("telegram://"))
+                || [...this.clients.keys()].some(k => k.startsWith("telegram://"));
+            if (!hasTgConn && process.env.TELEGRAM_BOT_TOKEN) {
+                try {
+                    await this.connect("telegram://bot", "telegram");
+                }
+                catch { }
+            }
+        }
+        // ── Additional WS ports beyond the default ──────────────────────────
+        // The default port is already started by startServer(); additional ports come from settings
+        const wsEntries = toArray(transports.ws).filter(e => e.enabled === true);
+        for (const entry of wsEntries) {
+            const p = entry.port ?? this.defaultPort;
+            if (!this.servers.has(`ws:${p}`)) {
+                try {
+                    await this.startHttpWs(p);
+                }
+                catch { }
+            }
         }
     }
     /** Watch the SDK's dist/ directory for changes and auto-reload. */

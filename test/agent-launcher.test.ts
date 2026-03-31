@@ -255,8 +255,8 @@ describe("launchAgent", () => {
     expect(call.options.permissionMode).toBe("bypassPermissions");
     expect(call.options.allowDangerouslySkipPermissions).toBe(true);
     expect(call.options.mcpServers).toBeDefined();
-    expect(call.options.mcpServers["talon-architect"]).toBeDefined();
-    expect(call.options.mcpServers["talon-architect"].command).toBe("node");
+    expect(call.options.mcpServers["talon-hub"]).toBeDefined();
+    expect(call.options.mcpServers["talon-hub"].command).toBe("node");
   });
 
   it("respects custom prompt", async () => {
@@ -280,7 +280,7 @@ describe("launchAgent", () => {
     });
 
     const call = mockQueryCalls[0];
-    const talonConfig = call.options.mcpServers["talon-architect"];
+    const talonConfig = call.options.mcpServers["talon-hub"];
     expect(talonConfig.env.TELEGRAM_BOT_TOKEN).toBe("123:ABC");
     expect(talonConfig.env.TALON_AGENT_NAME).toBe(name);
   });

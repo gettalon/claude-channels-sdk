@@ -302,6 +302,9 @@ describe("channelForChat population from channel transport", () => {
       c.role = "channel" as any;
     }
 
+    let emittedChatId77: string | undefined;
+    clientHub.once("message", (msg: any) => { emittedChatId77 = msg.chatId; });
+
     serverHub.wsSend(agent.ws, {
       type: "chat",
       chat_id: "telegram-chat-77",
@@ -311,9 +314,10 @@ describe("channelForChat population from channel transport", () => {
 
     await delay(200);
 
-    // Now channelForChat should be populated for chat-77
-    expect(clientHub.channelForChat.has("telegram-chat-77")).toBe(true);
-    const entry = clientHub.channelForChat.get("telegram-chat-77")!;
+    // Now channelForChat should be populated — keyed by UUID (emitted chatId)
+    expect(emittedChatId77).toBeDefined();
+    expect(clientHub.channelForChat.has(emittedChatId77!)).toBe(true);
+    const entry = clientHub.channelForChat.get(emittedChatId77!)!;
     expect(entry.role).toBe("channel");
 
     // Cleanup
@@ -333,7 +337,10 @@ describe("channelForChat population from channel transport", () => {
 
     const agent = serverHub.findAgent("no-overwrite")!;
 
-    // Send first message for a chat_id
+    // Send first message for a chat_id — capture the UUID emitted
+    let emittedChatIdStable: string | undefined;
+    clientHub.once("message", (msg: any) => { emittedChatIdStable = msg.chatId; });
+
     serverHub.wsSend(agent.ws, {
       type: "chat",
       chat_id: "stable-chat-123",
@@ -342,8 +349,9 @@ describe("channelForChat population from channel transport", () => {
     });
     await delay(200);
 
-    expect(clientHub.channelForChat.has("stable-chat-123")).toBe(true);
-    const firstEntry = clientHub.channelForChat.get("stable-chat-123")!;
+    expect(emittedChatIdStable).toBeDefined();
+    expect(clientHub.channelForChat.has(emittedChatIdStable!)).toBe(true);
+    const firstEntry = clientHub.channelForChat.get(emittedChatIdStable!)!;
     const firstId = firstEntry.id;
 
     // Send second message for same chat_id — should NOT overwrite
@@ -355,7 +363,7 @@ describe("channelForChat population from channel transport", () => {
     });
     await delay(200);
 
-    const secondEntry = clientHub.channelForChat.get("stable-chat-123")!;
+    const secondEntry = clientHub.channelForChat.get(emittedChatIdStable!)!;
     expect(secondEntry.id).toBe(firstId); // same entry, not overwritten
 
     // Cleanup

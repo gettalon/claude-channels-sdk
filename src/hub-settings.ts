@@ -202,7 +202,7 @@ export function installSettings(Hub: typeof ChannelHub): void {
         [...this.groups.entries()].map(([name, memberMap]) => [name, [...memberMap.values()].map(m => m.mode === "all" ? m.name : `${m.name}|${m.mode}`)])
       ),
       targets: Object.fromEntries(
-        [...((this as any).targetRegistry as Map<string, any>).entries()].map(([uuid, entry]) => [uuid, { name: entry.name, channelType: entry.channelType, rawId: entry.rawId, kind: entry.kind }])
+        [...((this as any).targetRegistry as Map<string, any>).entries()].map(([uuid, entry]) => [uuid, { name: entry.name, channelType: entry.channelType, rawId: entry.rawId, kind: entry.kind, ...(entry.sourceUrl ? { sourceUrl: entry.sourceUrl } : {}) }])
       ),
     };
     const json = JSON.stringify(newState);
@@ -251,7 +251,7 @@ export function installSettings(Hub: typeof ChannelHub): void {
     if (settings.state?.targets) {
       for (const [uuid, entry] of Object.entries(settings.state.targets)) {
         if ((this as any).registerTarget) {
-          (this as any).registerTarget((entry as any).name, (entry as any).channelType, (entry as any).rawId, (entry as any).kind);
+          (this as any).registerTarget((entry as any).name, (entry as any).channelType, (entry as any).rawId, (entry as any).kind, (entry as any).sourceUrl);
         }
       }
       const count = Object.keys(settings.state.targets).length;

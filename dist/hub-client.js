@@ -56,7 +56,11 @@ export function installClient(Hub) {
         const { createChannel } = await import("./protocol.js");
         const settings = await this.loadSettings();
         // Per-connection config: connectionConfig > connections[].config > transports[type]
-        let transportConfig = { ...(settings.transports?.[actualTransport] ?? {}) };
+        // transports[type] may be a single object (legacy) or an array (new many-to-many style)
+        const rawTransportCfg = settings.transports?.[actualTransport];
+        let transportConfig = Array.isArray(rawTransportCfg)
+            ? { ...(rawTransportCfg[0] ?? {}) } // use first entry as defaults
+            : { ...(rawTransportCfg ?? {}) };
         // Check if this URL has specific config in the connections array
         const savedConn = (settings.connections ?? []).find((c) => c.url === url || c.url === resolvedUrl);
         if (savedConn?.config) {
@@ -181,18 +185,30 @@ export function installClient(Hub) {
                 }
             }
             if (msg.type === "chat" || msg.type === "reply") {
-                const chatId = msg.chat_id ?? "host";
+                const rawChatId = msg.chat_id ?? "host";
                 const files = msg.files;
-                // Track originating connection so replies route back through the server WS
-                // This is critical for bidirectional hub-to-hub messaging:
-                // when server sends us a chat, we must remember which client entry to reply through
-                if (chatId !== "host" && !this.channelForChat.has(chatId)) {
-                    const client = this.clients.get(storeUrl);
-                    if (client)
-                        this.channelForChat.set(chatId, client);
+                const client = this.clients.get(storeUrl);
+                // Register user as an addressable target scoped to this connection (many-to-many safe).
+                // UUID conversion only applies to channel-role connections (telegram, slack, etc.)
+                // where the same raw chat_id may appear across multiple bots.
+                // Server-role connections (hub-to-hub) keep their raw chat_id.
+                let chatId = rawChatId;
+                const isChannelConn = client?.role === "channel";
+                if (rawChatId !== "host" && isChannelConn && this.registerTarget && client) {
+                    const user = msg.from ?? rawChatId;
+                    const uuid = this.registerTarget(user, actualTransport, rawChatId, "user", storeUrl);
+                    chatId = uuid; // MCP layer always sees UUID as chat_id
+                    // Key channelForChat by UUID for precise multi-bot routing
+                    if (!this.channelForChat.has(uuid)) {
+                        this.channelForChat.set(uuid, client);
+                    }
+                }
+                else if (rawChatId !== "host" && client && !this.channelForChat.has(rawChatId)) {
+                    // Server-role (hub-to-hub): keep raw chatId so reply() can route back
+                    this.channelForChat.set(rawChatId, client);
                 }
                 // Client receives chat from server — emit directly, don't re-route through server
-                this.emit("message", { content: msg.content ?? msg.text, chatId, user: msg.from ?? "host", type: "chat", source: resolvedUrl, ...(files?.length ? { files } : {}) });
+                this.emit("message", { content: msg.content ?? msg.text, chatId, user: msg.from ?? "host", type: "chat", source: resolvedUrl, ...(files?.length ? { files } : {}), ...(chatId !== rawChatId ? { raw_chat_id: rawChatId } : {}) });
                 this.fireHooks("onMessage", { content: msg.content ?? msg.text, chatId, user: msg.from ?? "host", type: "chat" }).catch(() => { });
             }
             if (msg.type === "group_broadcast") {

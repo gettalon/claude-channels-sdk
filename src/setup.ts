@@ -30,6 +30,8 @@ import type { HookEventName } from "./types.js";
 const CLAUDE_DIR = join(homedir(), ".claude");
 const SETTINGS_PATH = join(CLAUDE_DIR, "settings.json");
 const DEFAULT_SOCKET = join(CLAUDE_DIR, "channel-hooks.sock");
+const TALON_DIR = join(homedir(), ".talon");
+const TALON_SETTINGS_PATH = join(TALON_DIR, "settings.json");
 
 const ALL_HOOKS: HookEventName[] = [
   "SessionStart", "SessionEnd",
@@ -86,6 +88,24 @@ const CHANNEL_ENV_VARS: Record<string, string[]> = {
   twitch: ["TWITCH_OAUTH_TOKEN", "TWITCH_CHANNEL"],
 };
 
+/** Maps env var names → transport config field names for ~/.talon/settings.json */
+const CHANNEL_CONFIG_KEYS: Record<string, Record<string, string>> = {
+  telegram:   { TELEGRAM_BOT_TOKEN: "botToken" },
+  discord:    { DISCORD_BOT_TOKEN: "botToken" },
+  slack:      { SLACK_BOT_TOKEN: "botToken", SLACK_APP_TOKEN: "appToken" },
+  whatsapp:   { WHATSAPP_API_TOKEN: "apiToken", WHATSAPP_PHONE_NUMBER_ID: "phoneNumberId" },
+  signal:     { SIGNAL_CLI_PATH: "cliPath", SIGNAL_PHONE_NUMBER: "phoneNumber" },
+  irc:        { IRC_SERVER: "server", IRC_NICK: "nick", IRC_CHANNEL: "channel" },
+  googlechat: { GOOGLE_CHAT_CREDENTIALS: "credentials", GOOGLE_CHAT_SPACE: "space" },
+  line:       { LINE_CHANNEL_ACCESS_TOKEN: "accessToken", LINE_CHANNEL_SECRET: "channelSecret" },
+  feishu:     { FEISHU_APP_ID: "appId", FEISHU_APP_SECRET: "appSecret" },
+  matrix:     { MATRIX_HOMESERVER: "homeserver", MATRIX_ACCESS_TOKEN: "accessToken" },
+  mattermost: { MATTERMOST_URL: "url", MATTERMOST_TOKEN: "token" },
+  msteams:    { MSTEAMS_APP_ID: "appId", MSTEAMS_APP_PASSWORD: "appPassword" },
+  nostr:      { NOSTR_PRIVATE_KEY: "privateKey" },
+  twitch:     { TWITCH_OAUTH_TOKEN: "oauthToken", TWITCH_CHANNEL: "channel" },
+};
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 const rl = createInterface({ input: process.stdin, output: process.stderr });
@@ -110,6 +130,25 @@ function loadSettings(): Record<string, any> {
 
 function saveSettings(settings: Record<string, any>): void {
   writeFileSync(SETTINGS_PATH, JSON.stringify(settings, null, 2) + "\n");
+}
+
+function loadTalonSettings(): Record<string, any> {
+  mkdirSync(TALON_DIR, { recursive: true });
+  if (existsSync(TALON_SETTINGS_PATH)) {
+    try { return JSON.parse(readFileSync(TALON_SETTINGS_PATH, "utf-8")); } catch {}
+  }
+  return {};
+}
+
+function saveTalonSettings(patch: Record<string, any>): void {
+  mkdirSync(TALON_DIR, { recursive: true });
+  const existing = loadTalonSettings();
+  const merged = { ...existing, ...patch };
+  // Deep merge transports so adding telegram doesn't wipe ws, etc.
+  if (existing.transports || patch.transports) {
+    merged.transports = { ...(existing.transports ?? {}), ...(patch.transports ?? {}) };
+  }
+  writeFileSync(TALON_SETTINGS_PATH, JSON.stringify(merged, null, 2) + "\n");
 }
 
 function bold(s: string): string { return `\x1b[1m${s}\x1b[0m`; }
@@ -383,9 +422,46 @@ async function main(): Promise<void> {
     }
   }
 
-  // Save
+  // Save Claude Code settings
   saveSettings(settings);
   process.stderr.write(green("  ✓ ") + `Saved ${dim(SETTINGS_PATH)}\n`);
+
+  // ─── Also write transport config to ~/.talon/settings.json ────────
+  {
+    const talonTransports: Record<string, any> = { unix: [{ enabled: true }] };
+
+    if (channel === "websocket") {
+      talonTransports.ws = [{ enabled: true, port: 8080 }];
+    } else if (channel) {
+      const configMap = CHANNEL_CONFIG_KEYS[channel] ?? {};
+      const transportEntry: Record<string, unknown> = { enabled: true };
+      for (const [envKey, cfgKey] of Object.entries(configMap)) {
+        const value = envVars[envKey];
+        if (value) transportEntry[cfgKey] = value;
+      }
+
+      // Merge into existing entries for this channel type (supports multiple bots)
+      const existing = loadTalonSettings();
+      const existingEntries: any[] = Array.isArray(existing.transports?.[channel])
+        ? existing.transports[channel]
+        : [];
+      // Deduplicate by primary credential (e.g. botToken)
+      const primaryKey = Object.values(configMap)[0] as string | undefined;
+      const primaryValue = primaryKey ? transportEntry[primaryKey] : undefined;
+      const dupeIdx = (primaryValue && primaryKey)
+        ? existingEntries.findIndex((e: any) => e[primaryKey] === primaryValue)
+        : -1;
+      if (dupeIdx >= 0) {
+        existingEntries[dupeIdx] = { ...existingEntries[dupeIdx], ...transportEntry };
+      } else {
+        existingEntries.push(transportEntry);
+      }
+      talonTransports[channel] = existingEntries;
+    }
+
+    saveTalonSettings({ transports: talonTransports });
+    process.stderr.write(green("  ✓ ") + `Updated ${dim(TALON_SETTINGS_PATH)}\n`);
+  }
 
   // ─── Summary ──────────────────────────────────────────────────────
 
@@ -395,7 +471,8 @@ async function main(): Promise<void> {
 
   if (channel !== "websocket") {
     process.stderr.write(`  Channel: ${bold(channel!)}\n`);
-    process.stderr.write(`  Env vars stored in: ${dim(SETTINGS_PATH)} (survives plugin reloads)\n`);
+    process.stderr.write(`  Credentials stored in: ${dim(TALON_SETTINGS_PATH)}\n`);
+    process.stderr.write(`  Env vars also in: ${dim(SETTINGS_PATH)} (backward compat)\n`);
   }
 
   if (selectedHooks.length > 0) {

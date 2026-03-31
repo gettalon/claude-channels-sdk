@@ -79,7 +79,7 @@ export interface HubSettings {
             cachedAt?: string;
         };
     }>;
-    transports?: Record<string, Record<string, unknown>>;
+    transports?: Record<string, Record<string, unknown> | Array<Record<string, unknown>>>;
     access?: {
         allowlist?: string[];
         denylist?: string[];
@@ -164,6 +164,9 @@ export interface TargetEntry {
     rawId: string;
     /** "agent" | "user" | "group" | "channel" */
     kind: "agent" | "user" | "group" | "channel";
+    /** Source connection URL that owns this target (e.g. "telegram://main-bot").
+     *  Disambiguates same rawId across multiple bots/channels. */
+    sourceUrl?: string;
 }
 export interface HealthSnapshot {
     servers: Array<{
@@ -350,6 +353,7 @@ export declare class ChannelHub extends EventEmitter {
         from: string;
         source: "agent" | "channel";
         senderAgentId?: string;
+        sourceUrl?: string;
     }) => void;
     startServer: (port?: number, opts?: {
         http?: boolean;
@@ -478,6 +482,8 @@ export declare class ChannelHub extends EventEmitter {
      */
     tryKillOrphanOnPort(port: number): Promise<boolean>;
     autoSetup(): Promise<void>;
+    /** Start all enabled transports from settings.transports (many-to-many support). */
+    private autoConnectTransports;
     /** Watch the SDK's dist/ directory for changes and auto-reload. */
     private startFileWatcher;
     /** Periodically check git remote and pull + build if new commits available. */

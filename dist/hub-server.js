@@ -62,9 +62,14 @@ export function installServer(Hub) {
         });
         this.servers.set(`unix:${p}`, { type: "unix", port: p, httpServer: unixServer });
         process.stderr.write(`[${this.name}] Unix socket listening at ${socketPath}\n`);
-        // ── 2) HTTP+WS (on by default, disable with server.http: false in settings) ──
+        // ── 2) HTTP+WS ───────────────────────────────────────────────────────
+        // New-style: enabled when transports.ws has at least one { enabled: true } entry
+        // Legacy-style: enabled when server.http is not explicitly false (backward compat)
         const settings = await this.loadSettings();
-        const httpEnabled = opts?.http ?? settings.server?.http !== false;
+        const wsTransports = settings.transports?.ws;
+        const httpEnabled = opts?.http ?? (wsTransports !== undefined
+            ? (Array.isArray(wsTransports) ? wsTransports.some((e) => e.enabled === true) : !!wsTransports.enabled)
+            : settings.server?.http !== false);
         if (httpEnabled) {
             try {
                 await this.startHttpWs(p);

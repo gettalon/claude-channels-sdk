@@ -192,7 +192,7 @@ export function installSettings(Hub) {
                 return [chatId, { agentName: agent?.name ?? "unknown", channel: channel?.transport, channelUrl: channel?.url }];
             })),
             groups: Object.fromEntries([...this.groups.entries()].map(([name, memberMap]) => [name, [...memberMap.values()].map(m => m.mode === "all" ? m.name : `${m.name}|${m.mode}`)])),
-            targets: Object.fromEntries([...this.targetRegistry.entries()].map(([uuid, entry]) => [uuid, { name: entry.name, channelType: entry.channelType, rawId: entry.rawId, kind: entry.kind }])),
+            targets: Object.fromEntries([...this.targetRegistry.entries()].map(([uuid, entry]) => [uuid, { name: entry.name, channelType: entry.channelType, rawId: entry.rawId, kind: entry.kind, ...(entry.sourceUrl ? { sourceUrl: entry.sourceUrl } : {}) }])),
         };
         const json = JSON.stringify(newState);
         if (json === this.lastPersistedStateJson)
@@ -241,7 +241,7 @@ export function installSettings(Hub) {
         if (settings.state?.targets) {
             for (const [uuid, entry] of Object.entries(settings.state.targets)) {
                 if (this.registerTarget) {
-                    this.registerTarget(entry.name, entry.channelType, entry.rawId, entry.kind);
+                    this.registerTarget(entry.name, entry.channelType, entry.rawId, entry.kind, entry.sourceUrl);
                 }
             }
             const count = Object.keys(settings.state.targets).length;

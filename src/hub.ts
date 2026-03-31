@@ -96,7 +96,7 @@ export interface ContactEntry {
 export interface HubSettings {
   servers?: Array<{ url: string; name?: string; port?: number; pid?: number; startedAt?: string }>;
   connections?: Array<{ url: string; name?: string; transport?: string; connectedAt?: string; config?: Record<string, unknown>; remoteInfo?: { server_name?: string; agents?: Array<{ id: string; name: string; tools?: string[] }>; groups?: Array<{ name: string; members: string[] }>; chat_routes?: Record<string, { agentName?: string }>; cachedAt?: string } }>;
-  transports?: Record<string, Record<string, unknown>>;
+  transports?: Record<string, Record<string, unknown> | Array<Record<string, unknown>>>;
   access?: {
     allowlist?: string[];
     denylist?: string[];
@@ -177,6 +177,9 @@ export interface TargetEntry {
   rawId: string;
   /** "agent" | "user" | "group" | "channel" */
   kind: "agent" | "user" | "group" | "channel";
+  /** Source connection URL that owns this target (e.g. "telegram://main-bot").
+   *  Disambiguates same rawId across multiple bots/channels. */
+  sourceUrl?: string;
 }
 
 // ── ChannelHub ─────────────────────────────────────────────────────────────
@@ -462,7 +465,7 @@ export class ChannelHub extends EventEmitter {
   /** @internal */ declare emitMessage: (content: string, chatId: string, user: string) => void;
   /** @internal */ declare resolveTarget: (target: string) => string;
   /** @internal */ declare trySendToRoute: (chatId: string, content: string, from: string, rich?: import("./protocol.js").RichMessageParams) => boolean;
-  /** @internal */ declare routeChat: (params: { chatId: string; content: string; from: string; source: "agent" | "channel"; senderAgentId?: string }) => void;
+  /** @internal */ declare routeChat: (params: { chatId: string; content: string; from: string; source: "agent" | "channel"; senderAgentId?: string; sourceUrl?: string }) => void;
 
   // ── Server (delegated to hub-server.ts) ──────────────────────────────
   declare startServer: (port?: number, opts?: { http?: boolean }) => Promise<{ port: number }>;
@@ -948,6 +951,13 @@ export class ChannelHub extends EventEmitter {
 
     // Read port from settings if not set in opts
     const settings = await this.loadSettings();
+
+    // First-time init: write default transports (unix only — no HTTP+WS until explicitly enabled)
+    if (!settings.transports && Object.keys(settings).length === 0) {
+      settings.transports = { unix: [{ enabled: true }], ws: [], telegram: [] };
+      await this.saveSettings({ transports: settings.transports });
+    }
+
     const port = this.opts.port ?? (settings as any).port ?? this.defaultPort;
 
     // Auto-start server
@@ -1013,15 +1023,8 @@ export class ChannelHub extends EventEmitter {
           }
         }
 
-        // Auto-connect Telegram if token is available (env var or settings) but no saved connection exists
-        const hasTelegramConn = connections?.some(c => c.url.startsWith("telegram://"))
-          || [...this.clients.keys()].some(k => k.startsWith("telegram://"));
-        if (!hasTelegramConn) {
-          const tgToken = process.env.TELEGRAM_BOT_TOKEN ?? (settings.transports?.telegram as any)?.botToken;
-          if (tgToken) {
-            try { await this.connect("telegram://bot", "telegram"); } catch {}
-          }
-        }
+        // Auto-connect all enabled transports from settings
+        await this.autoConnectTransports(settings, connections);
       } catch {}
     }
 
@@ -1049,6 +1052,50 @@ export class ChannelHub extends EventEmitter {
     // Only in dev mode — production should not self-mutate
     if (this.opts.devMode || process.env.TALON_DEV === "1") {
       this.startFileWatcher();
+    }
+  }
+
+  /** Start all enabled transports from settings.transports (many-to-many support). */
+  private async autoConnectTransports(settings: HubSettings, existingConnections: HubSettings["connections"]): Promise<void> {
+    const transports = settings.transports ?? {};
+    // Normalize a transport entry to an array (supports both single-object and array forms)
+    const toArray = (val: unknown): Array<Record<string, unknown>> => {
+      if (!val) return [];
+      if (Array.isArray(val)) return val as Array<Record<string, unknown>>;
+      return [val as Record<string, unknown>];
+    };
+
+    // ── Telegram (supports multiple bots) ──────────────────────────────
+    const telegramEntries = toArray(transports.telegram).filter(e => e.enabled !== false);
+    for (const entry of telegramEntries) {
+      const connName = (entry.name as string) ?? "telegram";
+      const connUrl = `telegram://${connName}`;
+      const alreadyConnected = existingConnections?.some(c => c.url === connUrl)
+        || [...this.clients.keys()].some(k => k === connUrl);
+      if (!alreadyConnected) {
+        const token = (entry.botToken as string) ?? process.env.TELEGRAM_BOT_TOKEN;
+        if (token) {
+          try { await this.connect(connUrl, connName, { ...entry, botToken: token }); } catch {}
+        }
+      }
+    }
+    // Env-var fallback: no transports.telegram config defined at all
+    if (telegramEntries.length === 0) {
+      const hasTgConn = existingConnections?.some(c => c.url.startsWith("telegram://"))
+        || [...this.clients.keys()].some(k => k.startsWith("telegram://"));
+      if (!hasTgConn && process.env.TELEGRAM_BOT_TOKEN) {
+        try { await this.connect("telegram://bot", "telegram"); } catch {}
+      }
+    }
+
+    // ── Additional WS ports beyond the default ──────────────────────────
+    // The default port is already started by startServer(); additional ports come from settings
+    const wsEntries = toArray(transports.ws).filter(e => e.enabled === true);
+    for (const entry of wsEntries) {
+      const p = (entry.port as number) ?? this.defaultPort;
+      if (!this.servers.has(`ws:${p}`)) {
+        try { await (this as any).startHttpWs(p); } catch {}
+      }
     }
   }
 
