@@ -280,12 +280,15 @@ export class HubConfigService {
   telegramStreaming(): boolean {
     return this.env.TELEGRAM_STREAMING !== "false";
   }
-  /** Telegram webhook port for the channel adapter (default 3000). */
+  /** Telegram webhook port for the high-level channel adapter (default 3000).
+   *  When TELEGRAM_WEBHOOK_PORT is set, both channel adapter and transport adapter use it.
+   *  When unset, channel adapter defaults to 3000, transport adapter defaults to 3001. */
   telegramWebhookPort(codeOption?: number): number {
     if (codeOption !== undefined) return codeOption;
     return parseInt(this.env.TELEGRAM_WEBHOOK_PORT ?? "3000", 10);
   }
-  /** Telegram transport (TelegramAdapter) webhook port (default 3001). */
+  /** Telegram webhook port for TelegramAdapter (transport layer, default 3001).
+   *  See telegramWebhookPort() for the channel-adapter variant (default 3000). */
   telegramTransportWebhookPort(codeOption?: number): number {
     if (codeOption !== undefined) return codeOption;
     return parseInt(this.env.TELEGRAM_WEBHOOK_PORT ?? "3001", 10);
