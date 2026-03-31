@@ -17,6 +17,7 @@ import { ChannelServer } from "../channel-server.js";
 import type { ChannelServerOptions, ChannelPermissionRequest } from "../types.js";
 import type { MeshConfig, DiscoveredPeer, EncryptedPayload } from "../mesh.js";
 import { EventEmitter } from "node:events";
+import { HubConfigService } from "../hub-config-service.js";
 
 // ── Config ─────────────────────────────────────────────────────────────────────
 
@@ -116,30 +117,32 @@ type WsMessage =
 // ── Parse Config ───────────────────────────────────────────────────────────────
 
 export function parseConfig(): WebSocketConfig {
-  const mode = (process.env.WS_MODE ?? "both") as "server" | "client" | "both";
+  const _cfg = HubConfigService.fromEnv();
+  const mode = _cfg.wsMode() as "server" | "client" | "both";
 
   // Parse group config from env
   let group: GroupConfig | undefined;
-  if (process.env.WS_GROUP_NAME) {
+  const groupName = _cfg.wsGroupName();
+  if (groupName) {
     group = {
-      name: process.env.WS_GROUP_NAME,
-      access: (process.env.WS_GROUP_ACCESS ?? "private") as "public" | "private",
-      peers: process.env.WS_GROUP_PEERS?.split(",").map((s) => s.trim()).filter(Boolean),
+      name: groupName,
+      access: _cfg.wsGroupAccess() as "public" | "private",
+      peers: _cfg.wsGroupPeers(),
     };
   }
 
   return {
     mode,
-    port: parseInt(process.env.WS_PORT ?? "8080", 10),
-    host: process.env.WS_HOST ?? "127.0.0.1",
-    url: process.env.WS_URL,
-    agentName: process.env.WS_AGENT_NAME ?? `agent-${process.pid}`,
-    pairToken: process.env.WS_PAIR_TOKEN,
-    heartbeatInterval: parseInt(process.env.WS_HEARTBEAT_INTERVAL ?? "30000", 10),
-    autoReconnect: process.env.WS_AUTO_RECONNECT !== "false",
+    port: _cfg.wsPort(),
+    host: _cfg.wsHost(),
+    url: _cfg.wsUrl(),
+    agentName: _cfg.wsAgentName() ?? `agent-${process.pid}`,
+    pairToken: _cfg.wsPairToken(),
+    heartbeatInterval: _cfg.wsHeartbeatInterval(),
+    autoReconnect: _cfg.wsAutoReconnect(),
     tools: [],
     group,
-    httpEnabled: process.env.WS_HTTP !== "false",
+    httpEnabled: _cfg.wsHttpEnabled(),
   };
 }
 
@@ -753,7 +756,7 @@ export async function createWebSocketChannel(
 
       const registerMsg: WsMessage = {
         type: "register",
-        agent_name: cfg.agentName ?? process.env.TALON_AGENT_NAME ?? `agent-${process.pid}`,
+        agent_name: cfg.agentName ?? HubConfigService.fromEnv().envAgentName ?? `agent-${process.pid}`,
         pair_token: authToken,
         tools: cfg.tools ?? [],
         group_name: group?.name,
