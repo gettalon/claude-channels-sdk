@@ -82,6 +82,10 @@ interface EnvSnapshot {
   WS_GROUP_NAME?: string;
   WS_GROUP_ACCESS?: string;
   WS_GROUP_MAX_MEMBERS?: string;
+  WS_GROUP_PEERS?: string;
+  WS_HEARTBEAT_INTERVAL?: string;
+  // Core bootstrap
+  TALON_NO_SERVER?: string;
   // Mesh
   MESH_SECRET?: string;
   MESH_DEVICE_ID?: string;
@@ -130,6 +134,9 @@ function snapshotEnv(): EnvSnapshot {
     WS_GROUP_NAME: process.env.WS_GROUP_NAME,
     WS_GROUP_ACCESS: process.env.WS_GROUP_ACCESS,
     WS_GROUP_MAX_MEMBERS: process.env.WS_GROUP_MAX_MEMBERS,
+    WS_GROUP_PEERS: process.env.WS_GROUP_PEERS,
+    WS_HEARTBEAT_INTERVAL: process.env.WS_HEARTBEAT_INTERVAL,
+    TALON_NO_SERVER: process.env.TALON_NO_SERVER,
     MESH_SECRET: process.env.MESH_SECRET,
     MESH_DEVICE_ID: process.env.MESH_DEVICE_ID,
     MESH_MDNS: process.env.MESH_MDNS,
@@ -361,6 +368,16 @@ export class HubConfigService {
   wsGroupMaxMembers(): number {
     return parseInt(this.env.WS_GROUP_MAX_MEMBERS ?? "0", 10);
   }
+  /** WebSocket group peers (comma-separated URLs, optional). */
+  wsGroupPeers(): string[] | undefined {
+    const raw = this.env.WS_GROUP_PEERS;
+    if (!raw) return undefined;
+    return raw.split(",").map((s) => s.trim()).filter(Boolean);
+  }
+  /** WebSocket heartbeat interval in ms (default 30000). */
+  wsHeartbeatInterval(): number {
+    return parseInt(this.env.WS_HEARTBEAT_INTERVAL ?? "30000", 10);
+  }
 
   // ── Mesh accessors ───────────────────────────────────────────────────
 
@@ -390,6 +407,11 @@ export class HubConfigService {
   /** TALON_CHANNEL value for platform adapter selection (lowercased). */
   talonChannel(): string | undefined {
     return this.env.TALON_CHANNEL?.toLowerCase();
+  }
+
+  /** Whether auto-start server is disabled (TALON_NO_SERVER=1). */
+  talonNoServer(): boolean {
+    return this.env.TALON_NO_SERVER === "1";
   }
 
   /** Raw TALON_AGENT_NAME env value (may be undefined). Use when you need
