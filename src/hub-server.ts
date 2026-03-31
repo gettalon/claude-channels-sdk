@@ -265,6 +265,7 @@ export function installServer(Hub: typeof ChannelHub): void {
         this.wsSend(ws, { type: "heartbeat_ack" });
       }
 
+
       if (msg.type === "tool_result") {
         const p = this.pendingCalls.get(msg.call_id);
         if (p) { clearTimeout(p.timer); this.pendingCalls.delete(msg.call_id); p.resolve(msg.error ? { error: msg.error } : msg.result); }
