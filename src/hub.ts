@@ -14,6 +14,7 @@ import { EventEmitter } from "node:events";
 import type { AgentToolDef, SessionEnvelope, RecipientFilter } from "./protocol.js";
 import { loadAgentConfig, saveAgentConfig, listAgentConfigs } from "./agent-config.js";
 import { getTalonHome } from "./hub-settings.js";
+import { HubConfigService } from "./hub-config-service.js";
 import type { AgentConfig } from "./types.js";
 
 let _machineId: string | null = null;
@@ -152,6 +153,7 @@ import { installClient } from "./hub-client.js";
 import { installServer } from "./hub-server.js";
 import { installCommands } from "./hub-commands.js";
 import type { CommandDef, CommandResult } from "./hub-commands.js";
+import type { HubFacade, TargetSummary, ServerSummary } from "./hub-facade.js";
 
 /** A member of a group with a receive mode. */
 export interface GroupMember {
@@ -191,7 +193,7 @@ export interface HealthSnapshot {
   uptime: number;
 }
 
-type ClientEntry = {
+export type ClientEntry = {
   id: string;
   url: string;
   channelId: string;
@@ -202,7 +204,7 @@ type ClientEntry = {
   heartbeatTimer?: ReturnType<typeof setInterval>;
 };
 
-export class ChannelHub extends EventEmitter {
+export class ChannelHub extends EventEmitter implements HubFacade {
   readonly name: string;
   readonly defaultPort: number;
   readonly agents = new Map<string, AgentState>();
@@ -264,11 +266,9 @@ export class ChannelHub extends EventEmitter {
     super();
     this.startedAt = Date.now();
     this.opts = opts;
-    const cwd = process.cwd();
-    const isTempDir = /\/(tmp|temp|var\/folders)\//i.test(cwd) || cwd.includes("dispatch-");
-    const cwdName = isTempDir ? null : basename(cwd);
-    this.name = opts.name ?? process.env.TALON_AGENT_NAME ?? cwdName ?? "talon";
-    this.defaultPort = opts.port ?? (process.env.TALON_PORT ? parseInt(process.env.TALON_PORT, 10) : 9090);
+    const cfg = HubConfigService.fromEnv();
+    this.name = cfg.agentName(opts.name);
+    this.defaultPort = cfg.port(opts.port);
     this.clientTools = opts.clientTools ?? [];
     (this as any)._hooksEnabled = opts.hooksEnabled !== false;
     this.agentConfigDir = opts.agentConfigDir ?? join(getTalonHome(), "agents");
@@ -336,6 +336,13 @@ export class ChannelHub extends EventEmitter {
   declare registerCommand: (def: CommandDef) => void;
   declare executeCommand: (text: string, context?: { chatId?: string; user?: string }) => Promise<CommandResult | null>;
   declare listCommands: () => CommandDef[];
+
+  // ── Machine ID helpers (called by HubClientRuntime) ───────────────────
+
+  /** Ensure machine ID is loaded. Instance method that delegates to the module-level function. */
+  ensureMachineId(): Promise<void> { return ensureMachineId(); }
+  /** Generate a random agent name using the machine ID. */
+  randomAgentName(): string { return randomAgentName(); }
 
   // ── Getters ────────────────────────────────────────────────────────────
 
@@ -463,6 +470,8 @@ export class ChannelHub extends EventEmitter {
   declare handover: (chatId: string, toAgentId: string) => { ok: boolean; error?: string } | Promise<{ ok: boolean; error?: string }>;
   declare getChatRoute: (chatId: string) => string | undefined | Promise<string | undefined>;
   declare releaseChat: (chatId: string) => { ok: boolean; error?: string } | Promise<{ ok: boolean; error?: string }>;
+  declare displayName: (chatId: string) => string;
+  declare findTarget: (nameOrId: string) => TargetEntry | undefined;
   /** @internal */ declare resolvedName: () => string;
   /** @internal */ declare clearRoute: (chatId: string) => void;
   /** @internal */ declare emitMessage: (content: string, chatId: string, user: string) => void;
@@ -1053,7 +1062,7 @@ export class ChannelHub extends EventEmitter {
 
     // Auto-reload: watch dist/ for changes (from git pull + build) and hot-reload
     // Only in dev mode — production should not self-mutate
-    if (this.opts.devMode || process.env.TALON_DEV === "1") {
+    if (HubConfigService.fromEnv().devMode(this.opts.devMode)) {
       this.startFileWatcher();
     }
   }
@@ -1072,7 +1081,7 @@ export class ChannelHub extends EventEmitter {
     const telegramEntries = toArray(transports.telegram).filter(e => e.enabled !== false);
     for (const entry of telegramEntries) {
       const connName = (entry.name as string) ?? "telegram";
-      const token = (entry.botToken as string) ?? process.env.TELEGRAM_BOT_TOKEN;
+      const token = (entry.botToken as string) ?? HubConfigService.fromEnv().telegramBotToken();
       // Use stable URL keyed by token suffix so multiple bots don't collide,
       // but don't embed the display name — that changes without creating a new bot.
       const tokenKey = token ? token.split(":")[0] : "bot";
@@ -1089,7 +1098,7 @@ export class ChannelHub extends EventEmitter {
     if (telegramEntries.length === 0) {
       const hasTgConn = existingConnections?.some(c => c.url.startsWith("telegram://"))
         || [...this.clients.keys()].some(k => k.startsWith("telegram://"));
-      if (!hasTgConn && process.env.TELEGRAM_BOT_TOKEN) {
+      if (!hasTgConn && HubConfigService.fromEnv().telegramBotToken()) {
         try { await this.connect("telegram://bot", "telegram"); } catch {}
       }
     }
@@ -1186,7 +1195,7 @@ export class ChannelHub extends EventEmitter {
         if (!registered.includes(type)) {
           issues.push(`✗ ${type}: not registered`);
         } else if (type === "telegram") {
-          const token = (config as any).botToken ?? process.env.TELEGRAM_BOT_TOKEN;
+          const token = (config as any).botToken ?? HubConfigService.fromEnv().telegramBotToken();
           if (!token) { issues.push(`✗ telegram: missing botToken`); }
           else {
             try {
@@ -1498,6 +1507,121 @@ export class ChannelHub extends EventEmitter {
       agents: this.agents.size,
       chatRoutes: this.chatRoutes.size,
     };
+  }
+
+  // ── HubFacade: new public methods ─────────────────────────────────────
+
+  /** Return a snapshot of the chatRoutes map (chatId → agentId). */
+  getChatRoutes(): Map<string, string> {
+    return new Map(this.chatRoutes);
+  }
+
+  /** Return all targets in the target registry as plain summaries. */
+  listTargets(): TargetSummary[] {
+    return [...this.targetRegistry.values()].map(t => ({
+      uuid: t.uuid,
+      name: t.name,
+      kind: t.kind,
+      channelType: t.channelType,
+    }));
+  }
+
+  /** Return all running servers as plain summaries. */
+  getServers(): ServerSummary[] {
+    return [...this.servers.entries()].map(([id, s]) => ({
+      id,
+      type: s.type,
+      port: s.port,
+    }));
+  }
+
+  hasServer(id: string): boolean {
+    return this.servers.has(id);
+  }
+
+  // ── HubFacade: Runtime Command Interface ─────────────────────────────────
+  // Called exclusively by hub-runtime to mutate hub-core state.
+  // These form the explicit boundary between hub-core and hub-runtime.
+
+  /** Register a newly connected agent. */
+  registerAgent(id: string, state: AgentState): void {
+    this.agents.set(id, state);
+  }
+
+  /** Unregister a disconnected agent by ID. */
+  unregisterAgent(id: string): void {
+    this.agents.delete(id);
+  }
+
+  /** Update heartbeat timestamp for an agent. */
+  touchAgentHeartbeat(id: string): void {
+    const a = this.agents.get(id);
+    if (a) a.lastHeartbeat = Date.now();
+  }
+
+  /** Add an agent to the pending approval queue. */
+  addPendingAgent(code: string, pending: PendingAgent): void {
+    this.pendingAgents.set(code, pending);
+  }
+
+  /** Remove an agent from the pending approval queue. */
+  removePendingAgent(code: string): void {
+    this.pendingAgents.delete(code);
+  }
+
+  /**
+   * Claim ownership of a chat for a specific agent (used during registration/approval).
+   * Distinct from handover() which routes between existing active agents.
+   */
+  claimChat(chatId: string, agentId: string): void {
+    this.chatRoutes.set(chatId, agentId);
+  }
+
+  /** Register a (channelType, rawId) target pair with a stable UUID. Returns the UUID.
+   *  Delegated to hub-routing.ts via installRouting. */
+  declare registerTarget: (name: string, channelType: string, rawId: string, kind: "agent" | "user" | "group" | "channel", sourceUrl?: string) => string;
+
+  /** Remove a target entry by UUID. */
+  unregisterTarget(uuid: string): void {
+    const entry = this.targetRegistry.get(uuid);
+    if (entry) {
+      if (this.targetNameIndex.get(entry.name) === uuid) {
+        this.targetNameIndex.delete(entry.name);
+      }
+      this.targetRegistry.delete(uuid);
+    }
+  }
+
+  /** Record which channel client owns a given chat. */
+  registerChannelForChat(chatId: string, client: any): void {
+    this.channelForChat.set(chatId, client);
+  }
+
+  /** Remove channel-for-chat mapping. */
+  unregisterChannelForChat(chatId: string): void {
+    this.channelForChat.delete(chatId);
+  }
+
+  /** Register an outbound client connection by URL. */
+  registerClient(url: string, client: any): void {
+    this.clients.set(url, client);
+  }
+
+  /** Remove an outbound client connection. */
+  unregisterClient(url: string): void {
+    this.clients.delete(url);
+  }
+
+  /**
+   * Persistent agent router callback. Used by routeChat (hub-routing.ts)
+   * for @agent mention routing when the target is not directly connected.
+   * Returns true if the message was handled.
+   */
+  _persistentAgentRouter: ((name: string, content: string, from: string, chatId: string) => boolean) | null = null;
+
+  /** Register a persistent agent router for @agent mention routing. */
+  registerPersistentAgentRouter(handler: (name: string, content: string, from: string, chatId: string) => boolean): void {
+    this._persistentAgentRouter = handler;
   }
 }
 
