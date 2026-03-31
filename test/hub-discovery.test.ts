@@ -21,7 +21,7 @@ describe("Hub discovery", () => {
     wsUrl = `ws://localhost:${port}`;
     serverHub = createTestHub({ name: "my-hub", port });
     await serverHub.startServer(port, { http: true });
-    clientHub = createTestHub({ name: "client-hub", port, agentName: "remote-client" });
+    clientHub = createTestHub({ name: "client-hub", port, agentName: "remote-client", preferLocalIpc: false });
   });
 
   afterEach(async () => {
