@@ -189,13 +189,6 @@ export function installRouting(Hub) {
             }
             return { ok: true };
         }
-        // Try any channel client (last resort — for channel targets without a known route)
-        for (const [, client] of this.clients) {
-            if (client.role === "channel") {
-                this.wsSendAsync(client.ws, { type: "chat", chat_id: resolved, content, from: myName, ...rich });
-                return { ok: true };
-            }
-        }
         // Buffer message for offline agent — it will be flushed when the agent connects
         // Use agent name as buffer key (not ID) so flushBufferedMessages(agentName) can find it
         const agentByName = this.findAgent(resolved);
@@ -249,16 +242,6 @@ export function installRouting(Hub) {
                 this.wsSend(peer.ws, { type: "chat", chat_id: resolved, target: resolved, content: text, from: myName, ...rich, msgId });
             }
             return { ok: true };
-        }
-        // Try any channel client whose transport might reach this chatId
-        // (e.g. Telegram bot can send to any chatId via the same bot token)
-        for (const [, client] of this.clients) {
-            if (client.role === "channel") {
-                process.stderr.write(`[${this.name}] reply: sending to channel client ${client.transport}:${client.url}\n`);
-                const replyPayload = { type: "reply", chat_id: resolved, content: text, text, from: client.name ?? myName, ...rich };
-                this.wsSendAsync(client.ws, replyPayload);
-                return { ok: true };
-            }
         }
         return { ok: false, error: "No route" };
     };
