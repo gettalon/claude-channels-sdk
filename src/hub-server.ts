@@ -509,6 +509,17 @@ export function installServer(Hub: typeof ChannelHub): void {
         }
         const name = current.name ?? ref.id;
         this.agents.delete(ref.id);
+        // Clean up target registry entry for this agent
+        if ((this as any).unregisterTarget) {
+          (this as any).unregisterTarget(ref.id);
+        } else {
+          // Fallback: remove directly
+          const entry = this.targetRegistry.get(ref.id);
+          if (entry) {
+            this.targetRegistry.delete(ref.id);
+            if (this.targetNameIndex.get(entry.name) === ref.id) this.targetNameIndex.delete(entry.name);
+          }
+        }
         this.emit("agentDisconnected", { id: ref.id, name });
         this.fireHooks("onAgentDisconnect", { id: ref.id, name }).catch(() => {});
       }

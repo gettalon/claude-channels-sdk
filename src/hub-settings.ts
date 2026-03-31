@@ -202,7 +202,9 @@ export function installSettings(Hub: typeof ChannelHub): void {
         [...this.groups.entries()].map(([name, memberMap]) => [name, [...memberMap.values()].map(m => m.mode === "all" ? m.name : `${m.name}|${m.mode}`)])
       ),
       targets: Object.fromEntries(
-        [...((this as any).targetRegistry as Map<string, any>).entries()].map(([uuid, entry]) => [uuid, { name: entry.name, channelType: entry.channelType, rawId: entry.rawId, kind: entry.kind, ...(entry.sourceUrl ? { sourceUrl: entry.sourceUrl } : {}) }])
+        [...((this as any).targetRegistry as Map<string, any>).entries()]
+          .filter(([, entry]) => entry.kind !== "agent") // agents reconnect with new IDs — don't persist
+          .map(([uuid, entry]) => [uuid, { name: entry.name, channelType: entry.channelType, rawId: entry.rawId, kind: entry.kind, ...(entry.sourceUrl ? { sourceUrl: entry.sourceUrl } : {}) }])
       ),
     };
     const json = JSON.stringify(newState);
