@@ -535,20 +535,29 @@ export type ChannelFactory = (config: Record<string, unknown>) => TransportAdapt
 /** @deprecated Use ChannelFactory */
 export type TransportFactory = ChannelFactory;
 
-const channelRegistry = new Map<string, ChannelFactory>();
+interface ChannelRegistration { factory: ChannelFactory; requireE2E: boolean; }
+const channelRegistry = new Map<string, ChannelRegistration>();
 
-/** Register a channel adapter factory */
-export function registerChannel(type: string, factory: ChannelFactory): void {
-  channelRegistry.set(type, factory);
+/**
+ * Register a channel adapter factory.
+ * @param requireE2E - Whether connections over this transport require E2E encryption. Defaults to true.
+ */
+export function registerChannel(type: string, factory: ChannelFactory, { requireE2E = true }: { requireE2E?: boolean } = {}): void {
+  channelRegistry.set(type, { factory, requireE2E });
+}
+
+/** Returns true if the transport requires E2E encryption (defaults to true for unknown transports). */
+export function transportRequiresE2E(type: string): boolean {
+  return channelRegistry.get(type)?.requireE2E ?? true;
 }
 
 /** Create a channel adapter by type */
 export function createChannel(type: string, config: Record<string, unknown> = {}): TransportAdapter {
-  const factory = channelRegistry.get(type);
-  if (!factory) {
+  const reg = channelRegistry.get(type);
+  if (!reg) {
     throw new Error(`Unknown channel: ${type}. Registered: ${[...channelRegistry.keys()].join(", ")}`);
   }
-  return factory(config);
+  return reg.factory(config);
 }
 
 /** List registered channel types */

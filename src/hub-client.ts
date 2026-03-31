@@ -6,6 +6,7 @@ import type { ChannelHub } from "./hub.js";
 // randomAgentName is imported at runtime; circular dep is safe because
 // installClient() runs after hub.ts fully evaluates.
 import { randomAgentName, ensureMachineId } from "./hub.js";
+import { transportRequiresE2E } from "./protocol.js";
 
 /** Install client connection methods onto the ChannelHub prototype. */
 export function installClient(Hub: typeof ChannelHub): void {
@@ -141,7 +142,7 @@ export function installClient(Hub: typeof ChannelHub): void {
         } else if (msg.status === "ok") {
           // Approved (either immediately or after pending)
           process.stderr.write(`[${this.name}] Registered with server as agent "${msg.agent_id ?? name}"\n`);
-          this.emit("approvalGranted", { agentId: msg.agent_id, url: resolvedUrl });
+          this.emit("approvalGranted", { agentId: msg.agent_id, url: resolvedUrl, info: msg.info });
           // "Approved" is already captured in the "connected" event → "Ready" summary; suppress here.
           // Cache remote discovery info in settings.json
           if (msg.info) {
@@ -268,7 +269,17 @@ export function installClient(Hub: typeof ChannelHub): void {
     this.addConnection(storeUrl, displayName, connectionConfig).catch(() => {});
     process.stderr.write(`[${this.name}] Connected to ${resolvedUrl} via ${actualTransport} as "${displayName}"\n`);
 
-    await transport.send({ type: "register", agent_name: name, tools: (this as any).clientTools } as any);
+    // Include public key only for remote hub-to-hub (WS) connections for E2E encryption
+    let publicKey: string | undefined;
+    if (transportRequiresE2E(actualTransport)) {
+      try {
+        const { loadOrCreateIdentity } = await import("./mesh.js");
+        const { getTalonHome } = await import("./hub-settings.js");
+        if (!(this as any)._identity) (this as any)._identity = await loadOrCreateIdentity(getTalonHome());
+        publicKey = (this as any)._identity.publicKey;
+      } catch {}
+    }
+    await transport.send({ type: "register", agent_name: name, tools: (this as any).clientTools, metadata: publicKey ? { publicKey } : undefined } as any);
 
     // Heartbeat
     heartbeatTimer = setInterval(() => {

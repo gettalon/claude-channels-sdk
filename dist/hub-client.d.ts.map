@@ -1,1 +1,1 @@
-{"version":3,"file":"hub-client.d.ts","sourceRoot":"","sources":["../src/hub-client.ts"],"names":[],"mappings":"AAAA;;;GAGG;AACH,OAAO,KAAK,EAAE,UAAU,EAAE,MAAM,UAAU,CAAC;AAK3C,uEAAuE;AACvE,wBAAgB,aAAa,CAAC,GAAG,EAAE,OAAO,UAAU,GAAG,IAAI,CA8R1D"}
+{"version":3,"file":"hub-client.d.ts","sourceRoot":"","sources":["../src/hub-client.ts"],"names":[],"mappings":"AAAA;;;GAGG;AACH,OAAO,KAAK,EAAE,UAAU,EAAE,MAAM,UAAU,CAAC;AAM3C,uEAAuE;AACvE,wBAAgB,aAAa,CAAC,GAAG,EAAE,OAAO,UAAU,GAAG,IAAI,CAwS1D"}

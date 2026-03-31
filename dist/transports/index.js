@@ -14,22 +14,23 @@ import { createWebSocketTransport } from "./websocket.js";
 import { createTelegramTransport } from "./telegram.js";
 import { createStdioTransport } from "./stdio.js";
 import { createDiscordTransport, createSlackTransport, createWhatsAppTransport, createMatrixTransport, createSignalTransport, createIrcTransport, createLineTransport, createFeishuTransport, createMsTeamsTransport, createIMessageTransport, } from "./app-channels.js";
-// Auto-register built-in transports
-registerChannel("unix", createUnixTransport);
+// Local transports — always trusted, no E2E needed
+registerChannel("unix", createUnixTransport, { requireE2E: false });
+registerChannel("stdio", createStdioTransport, { requireE2E: false });
+// Remote hub-to-hub transport — E2E required (default)
 registerChannel("websocket", createWebSocketTransport);
-registerChannel("telegram", createTelegramTransport);
-registerChannel("stdio", createStdioTransport);
-// Auto-register application-level channel adapters as transports
-registerChannel("discord", createDiscordTransport);
-registerChannel("slack", createSlackTransport);
-registerChannel("whatsapp", createWhatsAppTransport);
-registerChannel("matrix", createMatrixTransport);
-registerChannel("signal", createSignalTransport);
-registerChannel("irc", createIrcTransport);
-registerChannel("line", createLineTransport);
-registerChannel("feishu", createFeishuTransport);
-registerChannel("msteams", createMsTeamsTransport);
-registerChannel("imessage", createIMessageTransport);
+// Application-level channel adapters — messages go via platform, no E2E
+registerChannel("telegram", createTelegramTransport, { requireE2E: false });
+registerChannel("discord", createDiscordTransport, { requireE2E: false });
+registerChannel("slack", createSlackTransport, { requireE2E: false });
+registerChannel("whatsapp", createWhatsAppTransport, { requireE2E: false });
+registerChannel("matrix", createMatrixTransport, { requireE2E: false });
+registerChannel("signal", createSignalTransport, { requireE2E: false });
+registerChannel("irc", createIrcTransport, { requireE2E: false });
+registerChannel("line", createLineTransport, { requireE2E: false });
+registerChannel("feishu", createFeishuTransport, { requireE2E: false });
+registerChannel("msteams", createMsTeamsTransport, { requireE2E: false });
+registerChannel("imessage", createIMessageTransport, { requireE2E: false });
 export { UnixSocketAdapter, createUnixTransport } from "./unix.js";
 export { WebSocketAdapter, createWebSocketTransport } from "./websocket.js";
 export { TelegramAdapter, createTelegramTransport } from "./telegram.js";

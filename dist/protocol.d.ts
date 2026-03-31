@@ -327,8 +327,15 @@ export declare function createEnvelope(from: string, type: SessionEnvelope["type
 export type ChannelFactory = (config: Record<string, unknown>) => TransportAdapter;
 /** @deprecated Use ChannelFactory */
 export type TransportFactory = ChannelFactory;
-/** Register a channel adapter factory */
-export declare function registerChannel(type: string, factory: ChannelFactory): void;
+/**
+ * Register a channel adapter factory.
+ * @param requireE2E - Whether connections over this transport require E2E encryption. Defaults to true.
+ */
+export declare function registerChannel(type: string, factory: ChannelFactory, { requireE2E }?: {
+    requireE2E?: boolean;
+}): void;
+/** Returns true if the transport requires E2E encryption (defaults to true for unknown transports). */
+export declare function transportRequiresE2E(type: string): boolean;
 /** Create a channel adapter by type */
 export declare function createChannel(type: string, config?: Record<string, unknown>): TransportAdapter;
 /** List registered channel types */

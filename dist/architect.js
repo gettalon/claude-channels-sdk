@@ -256,6 +256,29 @@ export async function createArchitectServer(opts = {}) {
             meta: { user: "system", source: serverName, type: "system" },
         });
     });
+    hub.on("approvalPending", ({ message, url }) => {
+        notify("notifications/claude/channel", {
+            content: `Waiting for approval from ${url}. ${message ?? ""}`,
+            meta: { user: "system", source: serverName, type: "system" },
+        });
+    });
+    hub.on("approvalGranted", ({ agentId, url, info }) => {
+        const agents = info?.agents ?? [];
+        const serverName2 = info?.server_name ?? url;
+        const agentSummary = agents.length
+            ? `Agents: ${agents.map((a) => a.name).join(", ")}`
+            : "No agents connected";
+        notify("notifications/claude/channel", {
+            content: `Connected to hub "${serverName2}". ${agentSummary}.`,
+            meta: { user: "system", source: serverName, type: "system" },
+        });
+    });
+    hub.on("approvalDenied", ({ message, url }) => {
+        notify("notifications/claude/channel", {
+            content: `Connection denied by ${url}. ${message ?? ""}`,
+            meta: { user: "system", source: serverName, type: "system" },
+        });
+    });
     // Health issues are logged to stderr; MCP notifications suppressed to avoid noise.
     hub.on("sendFailed", ({ error, target, type }) => {
         // Log to stderr (not MCP notification — avoid noisy channel messages to user)

@@ -205,17 +205,24 @@ export function createEnvelope(from, type, payload, opts) {
     };
 }
 const channelRegistry = new Map();
-/** Register a channel adapter factory */
-export function registerChannel(type, factory) {
-    channelRegistry.set(type, factory);
+/**
+ * Register a channel adapter factory.
+ * @param requireE2E - Whether connections over this transport require E2E encryption. Defaults to true.
+ */
+export function registerChannel(type, factory, { requireE2E = true } = {}) {
+    channelRegistry.set(type, { factory, requireE2E });
+}
+/** Returns true if the transport requires E2E encryption (defaults to true for unknown transports). */
+export function transportRequiresE2E(type) {
+    return channelRegistry.get(type)?.requireE2E ?? true;
 }
 /** Create a channel adapter by type */
 export function createChannel(type, config = {}) {
-    const factory = channelRegistry.get(type);
-    if (!factory) {
+    const reg = channelRegistry.get(type);
+    if (!reg) {
         throw new Error(`Unknown channel: ${type}. Registered: ${[...channelRegistry.keys()].join(", ")}`);
     }
-    return factory(config);
+    return reg.factory(config);
 }
 /** List registered channel types */
 export function listChannels() {
