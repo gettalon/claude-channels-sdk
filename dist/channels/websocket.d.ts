@@ -45,7 +45,7 @@ export interface WebSocketConfig {
     mode: "server" | "client" | "both";
     /** Port to listen on (server mode) */
     port?: number;
-    /** Host to bind to (server mode, default "0.0.0.0") */
+    /** Host to bind to (server mode, default "127.0.0.1") */
     host?: string;
     /** URL to connect to (client mode, e.g. "ws://talon-host:8080") */
     url?: string;

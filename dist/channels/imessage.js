@@ -14,6 +14,10 @@
  * - Graceful fallback when SIP blocks chat.db access
  * - Extra tools: imessage_send, imessage_contacts, imessage_history
  */
+// NOTE: This legacy channel adapter reads process.env directly.
+// Sanctioned exception: migration to HubConfigService is deferred until
+// the adapter is brought into the active monorepo architecture.
+// See REMAINING_FIXES.md §1 for context.
 import { ChannelServer } from "../channel-server.js";
 // ── Parse Config ──────────────────────────────────────────────────────────────
 export function parseConfig() {

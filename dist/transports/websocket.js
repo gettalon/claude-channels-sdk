@@ -51,7 +51,7 @@ export class WebSocketAdapter {
         this.httpServer = createServer();
         await new Promise((resolve, reject) => {
             this.httpServer.on("error", reject);
-            this.httpServer.listen(port, "0.0.0.0", resolve);
+            this.httpServer.listen(port, this.config.host ?? "127.0.0.1", resolve);
         });
         this.wss = new WebSocketServer({ server: this.httpServer });
         this.wss.on("connection", (ws) => {

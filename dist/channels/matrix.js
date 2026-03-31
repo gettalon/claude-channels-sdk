@@ -4,6 +4,10 @@
  * Uses matrix-js-sdk. Room timeline events for inbound, HTML formatted messages
  * with chunking, reaction emoji permission prompts, extra tools: matrix_react, matrix_room.
  */
+// NOTE: This legacy channel adapter reads process.env directly.
+// Sanctioned exception: migration to HubConfigService is deferred until
+// the adapter is brought into the active monorepo architecture.
+// See REMAINING_FIXES.md §1 for context.
 import { ChannelServer } from "../channel-server.js";
 export function parseConfig() {
     const homeserver = process.env.MATRIX_HOMESERVER ?? "";

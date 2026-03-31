@@ -25,6 +25,7 @@
  */
 import { spawn } from "node:child_process";
 import { ChannelHub } from "./hub.js";
+import { HubConfigService } from "./hub-config-service.js";
 import { existsSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { homedir, tmpdir } from "node:os";
@@ -174,12 +175,13 @@ async function main() {
         childArgs = def.defaultArgs;
     }
     // ── Start ChannelHub ────────────────────────────────────────────────────
-    const port = parseInt(process.env.TALON_PORT ?? "9090", 10);
-    const agentName = process.env.TALON_AGENT_NAME ?? `talon-${backend}`;
+    const _cfg = HubConfigService.fromEnv();
+    const port = _cfg.port();
+    const agentName = _cfg.agentName(`talon-${backend}`);
     const hub = new ChannelHub({
         name: agentName,
         port,
-        autoStart: process.env.TALON_NO_SERVER !== "1",
+        autoStart: !_cfg.talonNoServer(),
         autoConnect: true,
         agentName,
     });
@@ -213,7 +215,7 @@ async function main() {
     // Communication happens via ChannelHub (WS side channel), not stdio pipes
     const child = spawn(def.command, childArgs, {
         stdio: ["inherit", "inherit", "inherit"],
-        env: { ...process.env },
+        env: { ...process.env }, // intentional: pass full env to child process
         cwd: process.cwd(),
     });
     // Track which channel+chatId originated each conversation so replies route back

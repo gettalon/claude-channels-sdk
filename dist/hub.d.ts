@@ -141,6 +141,7 @@ export interface HubOptions {
 }
 export { setSettingsPath } from "./hub-settings.js";
 import type { CommandDef, CommandResult } from "./hub-commands.js";
+import type { HubFacade, TargetSummary, ServerSummary } from "./hub-facade.js";
 /** A member of a group with a receive mode. */
 export interface GroupMember {
     /** Qualified name, e.g. "ws:backend", "telegram:938185675", "agent:dexter" */
@@ -185,7 +186,7 @@ export interface HealthSnapshot {
     };
     uptime: number;
 }
-type ClientEntry = {
+export type ClientEntry = {
     id: string;
     url: string;
     channelId: string;
@@ -195,7 +196,7 @@ type ClientEntry = {
     name: string;
     heartbeatTimer?: ReturnType<typeof setInterval>;
 };
-export declare class ChannelHub extends EventEmitter {
+export declare class ChannelHub extends EventEmitter implements HubFacade {
     readonly name: string;
     readonly defaultPort: number;
     readonly agents: Map<string, AgentState>;
@@ -274,6 +275,10 @@ export declare class ChannelHub extends EventEmitter {
         user?: string;
     }) => Promise<CommandResult | null>;
     listCommands: () => CommandDef[];
+    /** Ensure machine ID is loaded. Instance method that delegates to the module-level function. */
+    ensureMachineId(): Promise<void>;
+    /** Generate a random agent name using the machine ID. */
+    randomAgentName(): string;
     serverRunning(): boolean;
     /** True if connected to a remote server (WS/Unix) — not counting channel connections (Telegram, etc.) */
     clientConnected(): boolean;
@@ -342,6 +347,8 @@ export declare class ChannelHub extends EventEmitter {
         ok: boolean;
         error?: string;
     }>;
+    displayName: (chatId: string) => string;
+    findTarget: (nameOrId: string) => TargetEntry | undefined;
     /** @internal */ resolvedName: () => string;
     /** @internal */ clearRoute: (chatId: string) => void;
     /** @internal */ emitMessage: (content: string, chatId: string, user: string) => void;
@@ -546,5 +553,48 @@ export declare class ChannelHub extends EventEmitter {
     stopHealthMonitor: () => void;
     /** Get status summary — proxies to main hub when in client mode */
     getStatus(): Record<string, any> | Promise<Record<string, any>>;
+    /** Return a snapshot of the chatRoutes map (chatId → agentId). */
+    getChatRoutes(): Map<string, string>;
+    /** Return all targets in the target registry as plain summaries. */
+    listTargets(): TargetSummary[];
+    /** Return all running servers as plain summaries. */
+    getServers(): ServerSummary[];
+    hasServer(id: string): boolean;
+    /** Register a newly connected agent. */
+    registerAgent(id: string, state: AgentState): void;
+    /** Unregister a disconnected agent by ID. */
+    unregisterAgent(id: string): void;
+    /** Update heartbeat timestamp for an agent. */
+    touchAgentHeartbeat(id: string): void;
+    /** Add an agent to the pending approval queue. */
+    addPendingAgent(code: string, pending: PendingAgent): void;
+    /** Remove an agent from the pending approval queue. */
+    removePendingAgent(code: string): void;
+    /**
+     * Claim ownership of a chat for a specific agent (used during registration/approval).
+     * Distinct from handover() which routes between existing active agents.
+     */
+    claimChat(chatId: string, agentId: string): void;
+    /** Register a (channelType, rawId) target pair with a stable UUID. Returns the UUID.
+     *  Delegated to hub-routing.ts via installRouting. */
+    registerTarget: (name: string, channelType: string, rawId: string, kind: "agent" | "user" | "group" | "channel", sourceUrl?: string) => string;
+    /** Remove a target entry by UUID. */
+    unregisterTarget(uuid: string): void;
+    /** Record which channel client owns a given chat. */
+    registerChannelForChat(chatId: string, client: any): void;
+    /** Remove channel-for-chat mapping. */
+    unregisterChannelForChat(chatId: string): void;
+    /** Register an outbound client connection by URL. */
+    registerClient(url: string, client: any): void;
+    /** Remove an outbound client connection. */
+    unregisterClient(url: string): void;
+    /**
+     * Persistent agent router callback. Used by routeChat (hub-routing.ts)
+     * for @agent mention routing when the target is not directly connected.
+     * Returns true if the message was handled.
+     */
+    _persistentAgentRouter: ((name: string, content: string, from: string, chatId: string) => boolean) | null;
+    /** Register a persistent agent router for @agent mention routing. */
+    registerPersistentAgentRouter(handler: (name: string, content: string, from: string, chatId: string) => boolean): void;
 }
 //# sourceMappingURL=hub.d.ts.map

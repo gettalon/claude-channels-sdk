@@ -5,6 +5,10 @@
  * QR code auth, message upsert for inbound, plain text (no markdown), 4096 char limit,
  * text-based permission prompts with reply buttons.
  */
+// NOTE: This legacy channel adapter reads process.env directly.
+// Sanctioned exception: migration to HubConfigService is deferred until
+// the adapter is brought into the active monorepo architecture.
+// See REMAINING_FIXES.md §1 for context.
 import { ChannelServer } from "../channel-server.js";
 export function parseConfig() {
     const sessionPath = process.env.WHATSAPP_SESSION_PATH ?? "./whatsapp-session";

@@ -1,0 +1,13 @@
+{
+  "name": "@gettalon/mesh",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@gettalon/protocol": "*",
+    "@gettalon/hub-core": "*"
+  }
+}

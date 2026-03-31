@@ -4,6 +4,10 @@
  * Uses discord.js Client. Message events for inbound, markdown support (2000 char limit),
  * button components for permission prompts, extra tools: discord_react, discord_thread, discord_edit.
  */
+// NOTE: This legacy channel adapter reads process.env directly.
+// Sanctioned exception: migration to HubConfigService is deferred until
+// the adapter is brought into the active monorepo architecture.
+// See REMAINING_FIXES.md §1 for context.
 import { ChannelServer } from "../channel-server.js";
 export function parseConfig() {
     const token = process.env.DISCORD_TOKEN ?? "";

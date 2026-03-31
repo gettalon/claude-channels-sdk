@@ -13,30 +13,33 @@
  * - Multi-agent: multiple edge agents on one server
  */
 import { ChannelServer } from "../channel-server.js";
+import { HubConfigService } from "../hub-config-service.js";
 // ── Parse Config ───────────────────────────────────────────────────────────────
 export function parseConfig() {
-    const mode = (process.env.WS_MODE ?? "both");
+    const _cfg = HubConfigService.fromEnv();
+    const mode = _cfg.wsMode();
     // Parse group config from env
     let group;
-    if (process.env.WS_GROUP_NAME) {
+    const groupName = _cfg.wsGroupName();
+    if (groupName) {
         group = {
-            name: process.env.WS_GROUP_NAME,
-            access: (process.env.WS_GROUP_ACCESS ?? "private"),
-            peers: process.env.WS_GROUP_PEERS?.split(",").map((s) => s.trim()).filter(Boolean),
+            name: groupName,
+            access: _cfg.wsGroupAccess(),
+            peers: _cfg.wsGroupPeers(),
         };
     }
     return {
         mode,
-        port: parseInt(process.env.WS_PORT ?? "8080", 10),
-        host: process.env.WS_HOST ?? "0.0.0.0",
-        url: process.env.WS_URL,
-        agentName: process.env.WS_AGENT_NAME ?? `agent-${process.pid}`,
-        pairToken: process.env.WS_PAIR_TOKEN,
-        heartbeatInterval: parseInt(process.env.WS_HEARTBEAT_INTERVAL ?? "30000", 10),
-        autoReconnect: process.env.WS_AUTO_RECONNECT !== "false",
+        port: _cfg.wsPort(),
+        host: _cfg.wsHost(),
+        url: _cfg.wsUrl(),
+        agentName: _cfg.wsAgentName() ?? `agent-${process.pid}`,
+        pairToken: _cfg.wsPairToken(),
+        heartbeatInterval: _cfg.wsHeartbeatInterval(),
+        autoReconnect: _cfg.wsAutoReconnect(),
         tools: [],
         group,
-        httpEnabled: process.env.WS_HTTP !== "false",
+        httpEnabled: _cfg.wsHttpEnabled(),
     };
 }
 // ── Extra MCP Tools ────────────────────────────────────────────────────────────
@@ -527,7 +530,7 @@ export async function createWebSocketChannel(config) {
             return;
         const { WebSocketServer } = await import("ws");
         const port = cfg.port ?? 8080;
-        const host = cfg.host ?? "0.0.0.0";
+        const host = cfg.host ?? "127.0.0.1";
         // Try to start server; if port is taken, fall back to client mode (reuse existing WS)
         try {
             await new Promise((resolve, reject) => {
@@ -595,7 +598,7 @@ export async function createWebSocketChannel(config) {
                 : cfg.pairToken;
             const registerMsg = {
                 type: "register",
-                agent_name: cfg.agentName ?? process.env.TALON_AGENT_NAME ?? `agent-${process.pid}`,
+                agent_name: cfg.agentName ?? HubConfigService.fromEnv().envAgentName ?? `agent-${process.pid}`,
                 pair_token: authToken,
                 tools: cfg.tools ?? [],
                 group_name: group?.name,
@@ -677,7 +680,7 @@ export async function createWebSocketChannel(config) {
         }
         currentMode = newMode;
         process.stderr.write(`[ws-channel] Mode switched: ${oldMode} → ${newMode}\n`);
-        return `Mode switched from "${oldMode}" to "${newMode}"${needsServer ? ` (server on ${cfg.host ?? "0.0.0.0"}:${cfg.port ?? 8080})` : ""}${needsClient && clientUrl ? ` (client → ${clientUrl})` : ""}`;
+        return `Mode switched from "${oldMode}" to "${newMode}"${needsServer ? ` (server on ${cfg.host ?? "127.0.0.1"}:${cfg.port ?? 8080})` : ""}${needsClient && clientUrl ? ` (client → ${clientUrl})` : ""}`;
     }
     // ── Initial startup based on configured mode ──────────────────────────────
     if (isServer)
@@ -712,7 +715,8 @@ export async function createWebSocketChannel(config) {
     if (meshRegistry) {
         const port = cfg.port ?? 8080;
         await meshRegistry.setup().catch(() => { });
-        meshRegistry.startReporting({ lan: [{ ip: "0.0.0.0", port }] });
+        const reportHost = cfg.host ?? "127.0.0.1";
+        meshRegistry.startReporting({ lan: [{ ip: reportHost, port }] });
         // Fetch registry peers and connect
         const registryPeers = await meshRegistry.getPeers().catch(() => []);
         for (const peer of registryPeers) {
@@ -837,8 +841,8 @@ export async function createWebSocketChannel(config) {
             };
             groupInvites.set(code, invite);
             const port = cfg.port ?? 8080;
-            const host = cfg.host ?? "0.0.0.0";
-            const wsUrl = `ws://${host === "0.0.0.0" ? "localhost" : host}:${port}`;
+            const host = cfg.host ?? "127.0.0.1";
+            const wsUrl = `ws://${host}:${port}`;
             const link = `${wsUrl}?invite=${code}`;
             process.stderr.write(`[ws-channel] Invite created: ${code} (${t}${invite.expiresAt ? `, expires ${new Date(invite.expiresAt).toISOString()}` : ", no expiry"})\n`);
             return JSON.stringify({

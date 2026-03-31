@@ -1,3 +1,4 @@
+import { HubConfigService } from "../hub-config-service.js";
 const API = "https://api.telegram.org/bot";
 const COHERE_TRANSCRIBE_URL = "https://api.cohere.com/v2/audio/transcriptions";
 async function tgCall(token, method, body) {
@@ -560,12 +561,13 @@ export class TelegramAdapter {
     webhookServer = null;
     webhookRegistered = false;
     constructor(config = {}) {
-        this.token = config.botToken ?? process.env.TELEGRAM_BOT_TOKEN ?? "";
+        this.token = config.botToken ?? HubConfigService.fromEnv().telegramBotToken() ?? "";
         this.sendOnly = config.sendOnly ?? false;
-        this.cohereApiKey = config.cohereApiKey ?? process.env.COHERE_API_KEY ?? undefined;
-        this.webhookUrl = config.webhookUrl ?? process.env.TELEGRAM_WEBHOOK_URL ?? undefined;
-        this.webhookPort = config.webhookPort ?? parseInt(process.env.TELEGRAM_WEBHOOK_PORT ?? "3001", 10);
-        this.webhookPath = config.webhookPath ?? process.env.TELEGRAM_WEBHOOK_PATH ?? "/telegram/webhook";
+        const _cfg = HubConfigService.fromEnv();
+        this.cohereApiKey = config.cohereApiKey ?? _cfg.cohereApiKey();
+        this.webhookUrl = config.webhookUrl ?? _cfg.telegramWebhookUrl();
+        this.webhookPort = config.webhookPort ?? _cfg.telegramTransportWebhookPort();
+        this.webhookPath = config.webhookPath ?? _cfg.telegramWebhookPath();
         if (!this.token)
             throw new Error("Telegram transport requires botToken or TELEGRAM_BOT_TOKEN env var");
     }

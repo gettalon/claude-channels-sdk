@@ -12,6 +12,7 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "type": "module",
+  "workspaces": ["packages/*"],
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -68,6 +69,38 @@
     "./imessage": {
       "types": "./dist/channels/imessage.d.ts",
       "import": "./dist/channels/imessage.js"
+    },
+    "./protocol": {
+      "types": "./dist/exports/protocol.d.ts",
+      "import": "./dist/exports/protocol.js"
+    },
+    "./channel": {
+      "types": "./dist/exports/channel.d.ts",
+      "import": "./dist/exports/channel.js"
+    },
+    "./hub": {
+      "types": "./dist/exports/hub.d.ts",
+      "import": "./dist/exports/hub.js"
+    },
+    "./transports": {
+      "types": "./dist/exports/transports.d.ts",
+      "import": "./dist/exports/transports.js"
+    },
+    "./tools": {
+      "types": "./dist/exports/tools.d.ts",
+      "import": "./dist/exports/tools.js"
+    },
+    "./mesh": {
+      "types": "./dist/exports/mesh.d.ts",
+      "import": "./dist/exports/mesh.js"
+    },
+    "./architect": {
+      "types": "./dist/exports/architect.d.ts",
+      "import": "./dist/exports/architect.js"
+    },
+    "./daemon": {
+      "types": "./dist/exports/daemon.d.ts",
+      "import": "./dist/exports/daemon.js"
     }
   },
   "scripts": {

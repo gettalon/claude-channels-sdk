@@ -4,6 +4,10 @@
  * Uses @larksuiteoapi/node-sdk. Event subscription for inbound,
  * rich text messages, interactive card buttons for permission prompts.
  */
+// NOTE: This legacy channel adapter reads process.env directly.
+// Sanctioned exception: migration to HubConfigService is deferred until
+// the adapter is brought into the active monorepo architecture.
+// See REMAINING_FIXES.md §1 for context.
 import { ChannelServer } from "../channel-server.js";
 export function parseConfig() {
     const appId = process.env.FEISHU_APP_ID ?? "";

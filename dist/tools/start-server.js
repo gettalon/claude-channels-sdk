@@ -14,14 +14,14 @@ export const startServerTool = {
         // Register WS server entry in settings so autoSetup starts it on next boot
         const settings = await hub.loadSettings();
         const servers = settings.servers ?? [];
-        const wsUrl = `ws://0.0.0.0:${port}`;
+        const wsUrl = `ws://127.0.0.1:${port}`;
         if (!servers.some((s) => s.url === wsUrl)) {
             servers.push({ url: wsUrl, name: hub.name, port, type: "ws" });
             settings.servers = servers;
             await hub.saveSettings(settings);
         }
         // If unix already running, start HTTP+WS directly
-        if (hub.servers?.has(`unix:${port}`) && !hub.servers?.has(`ws:${port}`)) {
+        if (hub.hasServer(`unix:${port}`) && !hub.hasServer(`ws:${port}`)) {
             try {
                 await hub.startHttpWs(port);
                 return JSON.stringify({ port, ws: true });

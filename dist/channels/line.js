@@ -4,6 +4,10 @@
  * Uses @line/bot-sdk. Webhook for inbound messages, Flex Message support,
  * quick reply buttons for permission prompts.
  */
+// NOTE: This legacy channel adapter reads process.env directly.
+// Sanctioned exception: migration to HubConfigService is deferred until
+// the adapter is brought into the active monorepo architecture.
+// See REMAINING_FIXES.md §1 for context.
 import { ChannelServer } from "../channel-server.js";
 export function parseConfig() {
     const channelAccessToken = process.env.LINE_CHANNEL_ACCESS_TOKEN ?? "";

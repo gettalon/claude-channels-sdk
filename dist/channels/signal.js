@@ -4,6 +4,10 @@
  * Uses signal-cli REST API (HTTP client). Polling /v1/receive for inbound,
  * POST /v2/send for outbound, text-based permission prompts with reply.
  */
+// NOTE: This legacy channel adapter reads process.env directly.
+// Sanctioned exception: migration to HubConfigService is deferred until
+// the adapter is brought into the active monorepo architecture.
+// See REMAINING_FIXES.md §1 for context.
 import { ChannelServer } from "../channel-server.js";
 export function parseConfig() {
     const cliUrl = (process.env.SIGNAL_CLI_URL ?? "http://127.0.0.1:8080").replace(/\/+$/, "");

@@ -4,6 +4,10 @@
  * Uses botbuilder (Bot Framework SDK). Activity handler for inbound,
  * Adaptive Cards for messages and permission prompts.
  */
+// NOTE: This legacy channel adapter reads process.env directly.
+// Sanctioned exception: migration to HubConfigService is deferred until
+// the adapter is brought into the active monorepo architecture.
+// See REMAINING_FIXES.md §1 for context.
 import { ChannelServer } from "../channel-server.js";
 export function parseConfig() {
     const appId = process.env.TEAMS_APP_ID ?? "";
