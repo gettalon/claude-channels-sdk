@@ -1,8 +1,9 @@
 {
   "name": "@gettalon/channels-sdk",
-  "version": "1.0.4",
+  "version": "1.1.0",
   "description": "SDK for building Claude Code channels with bidirectional chat, permission relay, and all 23 hook events",
   "bin": {
+    "talon": "./dist/cli.js",
     "claude-hook": "./dist/hook-script.js",
     "claude-channels": "./dist/setup.js",
     "channels": "./dist/server.js"
@@ -62,6 +63,10 @@
     "./msteams": {
       "types": "./dist/channels/msteams.d.ts",
       "import": "./dist/channels/msteams.js"
+    },
+    "./imessage": {
+      "types": "./dist/channels/imessage.d.ts",
+      "import": "./dist/channels/imessage.js"
     }
   },
   "scripts": {
@@ -69,25 +74,29 @@
     "dev": "tsc --watch",
     "setup": "node dist/setup.js",
     "postinstall": "node dist/postinstall.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.2.86",
+    "@larksuiteoapi/node-sdk": "^1.0.0",
+    "@line/bot-sdk": "^9.0.0",
     "@modelcontextprotocol/sdk": "^1.27.1",
-    "ws": "^8.18.0",
-    "zod": "^4.3.6",
-    "discord.js": "^14.0.0",
     "@slack/bolt": "^3.0.0",
     "@whiskeysockets/baileys": "^6.0.0",
-    "matrix-js-sdk": "^30.0.0",
+    "botbuilder": "^4.0.0",
+    "discord.js": "^14.0.0",
     "irc-framework": "^4.0.0",
-    "@line/bot-sdk": "^9.0.0",
-    "@larksuiteoapi/node-sdk": "^1.0.0",
-    "botbuilder": "^4.0.0"
+    "matrix-js-sdk": "^30.0.0",
+    "ws": "^8.18.0",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
     "@types/ws": "^8.5.0",
-    "typescript": "^5.5.0"
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.2"
   },
   "engines": {
     "node": ">=18"
@@ -107,6 +116,7 @@
   ],
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ]
 }

@@ -1,19 +1,32 @@
 #!/usr/bin/env node
 /**
- * Talon Channels — Universal Channel Server
+ * Talon Channels — Universal MCP Server
  *
- * A generic MCP server using the Talon Channel SDK that provides:
- * - WebSocket server for any client to connect (browser, mobile, desktop, bots)
- * - 21 platform-specific channel adapters (Telegram, Discord, Slack, etc.)
- * - Full 23 hook event forwarding
- * - Permission relay (approve/deny tool execution from any client)
- * - Bidirectional chat via channel notifications
- * - Client mode system (chat, monitor, full, custom)
- * - Multi-client support with independent modes
+ * Direct-start binary that runs as an MCP server with multiple transports:
  *
- * Set TALON_CHANNEL env var to pick an adapter:
- *   - "websocket" (default): runs a local WebSocket server
- *   - "telegram", "discord", "slack", etc.: uses platform-specific adapter
+ *   Transport (TALON_TRANSPORT):
+ *     "stdio"     — MCP over stdin/stdout (default, for Claude Code)
+ *     "ws"        — WebSocket + HTTP server with all channel features
+ *     "http"      — MCP-over-HTTP (SSE) server
+ *     "platform"  — Platform adapter (Telegram, Discord, Slack, etc.)
+ *
+ *   Mode (WS_MODE, for ws transport):
+ *     "both"   — server + client (default)
+ *     "server" — listen only
+ *     "client" — connect to remote only
+ *
+ *   Group (WS_GROUP_NAME):
+ *     access: public | private | invite
+ *     maxMembers: WS_GROUP_MAX_MEMBERS
+ *
+ *   Mesh (MESH_SECRET):
+ *     mDNS discovery, JWT auth, E2E encryption
+ *
+ * Usage:
+ *   channels                           # stdio MCP (default)
+ *   TALON_TRANSPORT=ws channels        # WebSocket + HTTP
+ *   TALON_TRANSPORT=http channels      # HTTP/SSE
+ *   TALON_CHANNEL=telegram channels    # Telegram adapter
  */
 export {};
 //# sourceMappingURL=server.d.ts.map

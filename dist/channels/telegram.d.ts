@@ -35,6 +35,8 @@ export interface TelegramAccess {
         chat_id: string;
         ts: number;
     }>;
+    /** Map of user ID → role label (e.g. "938185675": "owner") */
+    user_roles?: Record<string, string>;
 }
 export interface TelegramConfig {
     botToken: string;
@@ -50,6 +52,8 @@ export interface TelegramConfig {
     webhookSecret?: string;
     groqApiKey?: string;
     whisperModel?: string;
+    /** Map of user ID → role label (e.g. { "938185675": "owner" }) */
+    userRoles?: Record<string, string>;
 }
 export declare function parseConfig(): TelegramConfig;
 export declare function createTelegramChannel(config?: Partial<TelegramConfig>): Promise<{

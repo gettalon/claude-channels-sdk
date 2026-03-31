@@ -229,6 +229,8 @@ export interface ChannelServerOptions {
     version: string;
     /** Instructions injected into Claude's system prompt */
     instructions: string;
+    /** Agent display name (e.g. "Arc", "Home Claude"). Injected into meta as agent_name. */
+    agentName?: string;
     /** Enable permission relay capability (default: true) */
     permissionRelay?: boolean;
     /** Unix socket path for hook IPC (default: ~/.claude/channel-hooks.sock) */
@@ -243,9 +245,92 @@ export interface ChannelServerOptions {
     enabledHooks?: HookEventName[];
     /** Timeout in ms for blocking hook client responses (default: 30000) */
     blockingTimeout?: number;
+    /** Access control / pairing options */
+    accessControl?: AccessControlOptions;
 }
 export type HookEventHandler = (input: HookEventInput) => HookResponse | Promise<HookResponse | void> | void;
 export type PermissionRequestHandler = (request: ChannelPermissionRequest) => void;
 export type ChatReplyHandler = (chatId: string, text: string) => void;
 export type ToolCallHandler = (name: string, args: Record<string, unknown>) => Promise<unknown>;
+/** Access policy mode for a channel */
+export type AccessMode = "pairing" | "open" | "disabled";
+/** Per-scope access policy */
+export interface AccessPolicy {
+    mode: AccessMode;
+    allowed: string[];
+    admins: string[];
+}
+/** Pending pairing request */
+export interface PendingPairing {
+    code: string;
+    identity: string;
+    displayName: string;
+    chatId: string;
+    channel: string;
+    ts: number;
+    metadata?: Record<string, unknown>;
+}
+/** Persisted access state */
+export interface AccessState {
+    default: AccessPolicy;
+    pending: Record<string, PendingPairing>;
+}
+/** Options for access control */
+export interface AccessControlOptions {
+    /** Path to persist access.json (default: ~/.claude/channels/access.json) */
+    accessPath?: string;
+    /** Default access mode (default: "pairing") */
+    defaultMode?: AccessMode;
+    /** Auto-approve first connection as admin (default: true) */
+    autoApproveFirst?: boolean;
+    /** Pairing code length (default: 6) */
+    codeLength?: number;
+}
+/** Per-agent configuration stored in ~/.talon/agents/{id}.json */
+export interface AgentConfig {
+    id: string;
+    name: string;
+    channels?: Array<{
+        type: string;
+        id: string;
+        url: string;
+    }>;
+    access?: {
+        allowlist?: string[];
+        denylist?: string[];
+        requireApproval?: boolean;
+    };
+    state?: {
+        chatRoutes?: Record<string, {
+            agentName: string;
+            channel?: string;
+            channelUrl?: string;
+        }>;
+        groups?: Record<string, string[]>;
+    };
+    contacts?: Record<string, {
+        name: string;
+        channels: Array<{
+            type: string;
+            id: string;
+            url: string;
+        }>;
+    }>;
+    handover?: Record<string, unknown>;
+    /** Channel types this agent is allowed to use. Empty/undefined = all allowed. */
+    allowedChannels?: string[];
+    /** Agent names/IDs this agent is allowed to communicate with. Empty/undefined = all allowed. */
+    allowedAgents?: string[];
+    /** Keywords/intents this agent can handle, used for content-based routing. */
+    intents?: string[];
+    /** Group permissions: which groups this agent belongs to and its role in each. */
+    groupPermissions?: Record<string, {
+        role: "member" | "admin" | "owner";
+        canSend?: boolean;
+        canReceive?: boolean;
+    }>;
+    metadata?: Record<string, unknown>;
+    createdAt?: string;
+    updatedAt?: string;
+}
 //# sourceMappingURL=types.d.ts.map

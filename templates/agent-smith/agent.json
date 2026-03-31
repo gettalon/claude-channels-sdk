@@ -1,0 +1,11 @@
+{
+  "name": "{{name}}",
+  "status": "running",
+  "mode": "{{mode}}",
+  "hubUrl": "{{hub_url}}",
+  "cwd": "{{cwd}}",
+  "additionalDirectories": [],
+  "model": "default",
+  "allowedTools": [],
+  "disallowedTools": []
+}

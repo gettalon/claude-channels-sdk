@@ -23,4 +23,10 @@ export { createFeishuChannel, parseConfig as parseFeishuConfig } from "./feishu.
 export type { FeishuConfig } from "./feishu.js";
 export { createTeamsChannel, parseConfig as parseTeamsConfig } from "./msteams.js";
 export type { TeamsConfig } from "./msteams.js";
+export { createWebSocketChannel, parseConfig as parseWebSocketConfig } from "./websocket.js";
+export type { WebSocketConfig, GroupConfig, GroupInvite, ConnectedAgent, AgentTool } from "./websocket.js";
+export { createMcpHttpChannel, parseConfig as parseMcpHttpConfig } from "./mcp-http.js";
+export type { McpHttpConfig } from "./mcp-http.js";
+export { createIMessageChannel, parseConfig as parseIMessageConfig } from "./imessage.js";
+export type { IMessageConfig } from "./imessage.js";
 //# sourceMappingURL=index.d.ts.map

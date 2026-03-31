@@ -166,6 +166,9 @@ function parseArgs() {
             case "--token":
                 result.token = args[++i];
                 break;
+            case "--talon-home":
+                result.talonHome = args[++i];
+                break;
             case "--yes":
             case "-y":
                 result.nonInteractive = true;
@@ -248,9 +251,27 @@ async function main() {
             }
         }
     }
-    // ─── Step 3: Channel name ─────────────────────────────────────────
+    // ─── Step 3: Talon home directory ─────────────────────────────────
+    let talonHome = args.talonHome;
+    if (!talonHome) {
+        const existingHome = process.env.TALON_HOME;
+        if (existingHome) {
+            process.stderr.write(dim(`  TALON_HOME already set: ${existingHome}\n`));
+        }
+        else {
+            const answer = await ask(cyan("? ") + `TALON_HOME path ` + dim("[~/.talon]") + ": ");
+            if (answer)
+                talonHome = answer;
+        }
+    }
+    if (talonHome) {
+        const expanded = talonHome.replace(/^~(?=\/)/, homedir());
+        envVars.TALON_HOME = expanded;
+        process.stderr.write(green("  ✓ ") + `TALON_HOME = ${expanded}\n`);
+    }
+    // ─── Step 4: Channel name ─────────────────────────────────────────
     let name = args.name ?? "talon-channels";
-    // ─── Step 4: Hook selection ────────────────────────────────────────
+    // ─── Step 5: Hook selection ────────────────────────────────────────
     let selectedHooks;
     if (args.allHooks) {
         selectedHooks = ALL_HOOKS;
@@ -296,12 +317,12 @@ async function main() {
                 process.stderr.write(dim("  Using default: minimal\n"));
         }
     }
-    // ─── Step 5: Resolve hook binary path ──────────────────────────────
+    // ─── Step 6: Resolve hook binary path ──────────────────────────────
     const hookCommand = resolveHookPath();
     const socket = args.socket ?? DEFAULT_SOCKET;
     process.stderr.write("\n");
     process.stderr.write(dim(`  Hook binary: ${hookCommand}\n`));
-    // ─── Step 6: Apply settings ───────────────────────────────────────
+    // ─── Step 7: Apply settings ───────────────────────────────────────
     const settings = loadSettings();
     // Add env vars to settings.json env field
     if (Object.keys(envVars).length > 0) {
@@ -395,7 +416,7 @@ async function remove() {
     }
     // Remove channel env vars
     if (settings.env) {
-        const channelVars = ["TALON_CHANNEL", ...Object.values(CHANNEL_ENV_VARS).flat()];
+        const channelVars = ["TALON_CHANNEL", "TALON_HOME", ...Object.values(CHANNEL_ENV_VARS).flat()];
         for (const key of channelVars) {
             if (settings.env[key]) {
                 delete settings.env[key];

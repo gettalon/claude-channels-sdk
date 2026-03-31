@@ -34,6 +34,8 @@ export interface TelegramAccess {
   dm: AccessPolicy;
   group: AccessPolicy;
   pending_pairings: Record<string, { code: string; user_id: string; username: string; chat_id: string; ts: number }>;
+  /** Map of user ID → role label (e.g. "938185675": "owner") */
+  user_roles?: Record<string, string>;
 }
 
 export interface TelegramConfig {
@@ -50,6 +52,8 @@ export interface TelegramConfig {
   webhookSecret?: string;
   groqApiKey?: string;
   whisperModel?: string;
+  /** Map of user ID → role label (e.g. { "938185675": "owner" }) */
+  userRoles?: Record<string, string>;
 }
 
 type TelegramChatType = "private" | "group" | "supergroup" | "channel";
@@ -120,6 +124,8 @@ type TelegramMessage = {
   audio?: { file_id?: string; duration?: number };
   sticker?: { emoji?: string; set_name?: string };
   animation?: { file_id?: string };
+  video?: { file_id?: string; file_name?: string; duration?: number };
+  video_note?: { file_id?: string; duration?: number };
   location?: { latitude?: number; longitude?: number };
   contact?: { first_name?: string; last_name?: string; phone_number?: string };
 };
@@ -433,6 +439,11 @@ export async function createTelegramChannel(
   mkdirSync(downloadDir, { recursive: true });
 
   let access = await loadAccess(accessPath);
+
+  // Merge user_roles from config (e.g. ~/.talon/settings.json transports.telegram.userRoles)
+  if (cfg.userRoles) {
+    access.user_roles = { ...access.user_roles, ...cfg.userRoles };
+  }
 
   if (cfg.allowedChats && cfg.allowedChats.length > 0) {
     for (const id of cfg.allowedChats) {
@@ -882,6 +893,7 @@ export async function createTelegramChannel(
     streamingStatus.delete(chatId);
   }
 
+  const agentName = process.env.TALON_AGENT_NAME;
   const channel = new ChannelServer({
     name: "telegram",
     version: "1.1.0",
@@ -891,6 +903,7 @@ export async function createTelegramChannel(
       "Messages support HTML formatting. Keep messages under 4096 characters; longer content is auto-chunked.",
       "Permission requests appear as inline keyboard buttons in the chat. The user taps Allow or Deny.",
     ].join(" "),
+    agentName,
     permissionRelay: true,
     extraTools: EXTRA_TOOLS,
   });
@@ -1005,7 +1018,13 @@ export async function createTelegramChannel(
     }
 
     const fallbackName = [message.from?.first_name, message.from?.last_name].filter(Boolean).join(" ");
-    const username = (message.from?.username ?? fallbackName) || "unknown";
+    let username = (message.from?.username ?? fallbackName) || "unknown";
+
+    // Append role label if configured (e.g. "jxjshshdh (owner)")
+    const role = access.user_roles?.[String(userId)];
+    if (role) {
+      username = `${username} (${role})`;
+    }
 
     return {
       chatId: String(chatId),
@@ -1271,7 +1290,15 @@ export async function createTelegramChannel(
       messageText = `[Replying to ${replyUser}: "${reply.text.slice(0, 100)}"]\n${messageText}`;
     }
 
-    await channel.pushMessage(messageText, buildMeta(message, info.chatId, info.username));
+    await pushWithForwardPrefix(messageText, buildMeta(message, info.chatId, info.username));
+  }
+
+  /** Push a message, prepending [Forwarded from ...] if the meta has forwarded_from. */
+  async function pushWithForwardPrefix(content: string, meta: Record<string, string>): Promise<void> {
+    const text = meta.forwarded_from
+      ? `[Forwarded from ${meta.forwarded_from}]\n${content}`
+      : content;
+    await channel.pushMessage(text, meta);
   }
 
   async function handlePhotoMessage(message: TelegramMessage): Promise<void> {
@@ -1297,7 +1324,7 @@ export async function createTelegramChannel(
       imagePath = await downloadFile(fileId);
     } catch {}
 
-    await channel.pushMessage(
+    await pushWithForwardPrefix(
       message.caption ?? "What's in this image?",
       buildMeta(message, info.chatId, info.username, {
         image_file_id: fileId,
@@ -1320,7 +1347,7 @@ export async function createTelegramChannel(
       filePath = await downloadFile(document.file_id, document.file_name);
     } catch {}
 
-    await channel.pushMessage(
+    await pushWithForwardPrefix(
       message.caption ?? `[Document: ${document.file_name ?? "file"}]`,
       buildMeta(message, info.chatId, info.username, {
         document_file_id: document.file_id,
@@ -1351,7 +1378,7 @@ export async function createTelegramChannel(
       ? `[Voice]: ${transcription}`
       : "[Voice message received but transcription failed. Install whisper or configure GROQ_API_KEY.]";
 
-    await channel.pushMessage(
+    await pushWithForwardPrefix(
       text,
       buildMeta(message, info.chatId, info.username, {
         voice_file_id: voice.file_id,
@@ -1369,7 +1396,7 @@ export async function createTelegramChannel(
     }
 
     activeChats.add(info.chatId);
-    await channel.pushMessage(
+    await pushWithForwardPrefix(
       `[Sticker: ${sticker.emoji ?? ""} from set "${sticker.set_name ?? "unknown"}"]`,
       buildMeta(message, info.chatId, info.username),
     );
@@ -1383,10 +1410,54 @@ export async function createTelegramChannel(
     }
 
     activeChats.add(info.chatId);
-    await channel.pushMessage(
+    await pushWithForwardPrefix(
       message.caption ?? "[GIF/Animation received]",
       buildMeta(message, info.chatId, info.username, {
         animation_file_id: animation.file_id,
+      }),
+    );
+  }
+
+  async function handleVideoMessage(message: TelegramMessage): Promise<void> {
+    const info = await checkAccess(message);
+    const video = message.video;
+    if (!info || !video?.file_id) {
+      return;
+    }
+
+    activeChats.add(info.chatId);
+    let filePath: string | undefined;
+    try {
+      filePath = await downloadFile(video.file_id, video.file_name);
+    } catch {}
+
+    await pushWithForwardPrefix(
+      message.caption ?? `[Video${video.duration ? ` (${video.duration}s)` : ""}]`,
+      buildMeta(message, info.chatId, info.username, {
+        video_file_id: video.file_id,
+        ...(filePath ? { file_path: filePath } : {}),
+      }),
+    );
+  }
+
+  async function handleVideoNoteMessage(message: TelegramMessage): Promise<void> {
+    const info = await checkAccess(message);
+    const videoNote = message.video_note;
+    if (!info || !videoNote?.file_id) {
+      return;
+    }
+
+    activeChats.add(info.chatId);
+    let filePath: string | undefined;
+    try {
+      filePath = await downloadFile(videoNote.file_id);
+    } catch {}
+
+    await pushWithForwardPrefix(
+      `[Video Note${videoNote.duration ? ` (${videoNote.duration}s)` : ""}]`,
+      buildMeta(message, info.chatId, info.username, {
+        video_note_file_id: videoNote.file_id,
+        ...(filePath ? { file_path: filePath } : {}),
       }),
     );
   }
@@ -1399,7 +1470,7 @@ export async function createTelegramChannel(
     }
 
     activeChats.add(info.chatId);
-    await channel.pushMessage(
+    await pushWithForwardPrefix(
       `[Location: ${location.latitude ?? 0}, ${location.longitude ?? 0}]`,
       buildMeta(message, info.chatId, info.username),
     );
@@ -1414,7 +1485,7 @@ export async function createTelegramChannel(
 
     activeChats.add(info.chatId);
     const name = [contact.first_name, contact.last_name].filter(Boolean).join(" ");
-    await channel.pushMessage(
+    await pushWithForwardPrefix(
       `[Contact: ${name}, ${contact.phone_number ?? ""}]`,
       buildMeta(message, info.chatId, info.username),
     );
@@ -1446,6 +1517,14 @@ export async function createTelegramChannel(
     }
     if (message.sticker) {
       await handleStickerMessage(message);
+      return;
+    }
+    if (message.video) {
+      await handleVideoMessage(message);
+      return;
+    }
+    if (message.video_note) {
+      await handleVideoNoteMessage(message);
       return;
     }
     if (message.animation) {
