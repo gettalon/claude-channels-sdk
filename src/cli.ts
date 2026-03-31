@@ -27,6 +27,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { createInterface } from "node:readline";
 import { ChannelHub } from "./hub.js";
+import { HubConfigService } from "./hub-config-service.js";
 import { existsSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { homedir, tmpdir } from "node:os";
@@ -209,13 +210,14 @@ async function main(): Promise<void> {
 
   // ── Start ChannelHub ────────────────────────────────────────────────────
 
-  const port = parseInt(process.env.TALON_PORT ?? "9090", 10);
-  const agentName = process.env.TALON_AGENT_NAME ?? `talon-${backend}`;
+  const _cfg = HubConfigService.fromEnv();
+  const port = _cfg.port();
+  const agentName = _cfg.agentName(`talon-${backend}`);
 
   const hub = new ChannelHub({
     name: agentName,
     port,
-    autoStart: process.env.TALON_NO_SERVER !== "1",
+    autoStart: !_cfg.talonNoServer(),
     autoConnect: true,
     agentName,
   });
@@ -256,7 +258,7 @@ async function main(): Promise<void> {
   // Communication happens via ChannelHub (WS side channel), not stdio pipes
   const child: ChildProcess = spawn(def.command, childArgs, {
     stdio: ["inherit", "inherit", "inherit"],
-    env: { ...process.env },
+    env: { ...process.env }, // intentional: pass full env to child process
     cwd: process.cwd(),
   });
 

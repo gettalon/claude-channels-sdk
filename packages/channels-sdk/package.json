@@ -4,6 +4,7 @@
   "type": "module",
   "description": "Backwards-compatibility shim for @gettalon/channels-sdk. New code should import from @gettalon/channels-sdk directly.",
   "_deprecated": "This package is a backwards-compatibility shim. New code should use @gettalon/channels-sdk directly with subpath exports.",
+  "_removedIn": "2.0.0",
   "main": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
