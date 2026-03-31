@@ -62,7 +62,13 @@ export const sendTool: ToolDefinition = {
 
     // Resolve UUID via target registry
     const found = (ctx.hub as any).findTarget?.(target);
-    if (!found) return JSON.stringify({ sent: false, error: `UUID "${target}" not found. Use targets tool to list available UUIDs.` });
+    if (!found) {
+      // Fall through to sendMessage — handles hub peer proxying for daemon-side agents
+      const r = ctx.hub.sendMessage(target, content);
+      return r.ok
+        ? JSON.stringify({ sent: true, target, via: "proxy" })
+        : JSON.stringify({ sent: false, error: `UUID "${target}" not found. Use targets tool to list available UUIDs.` });
+    }
 
     const rawId = found.rawId;
     if (found.kind === "agent") {

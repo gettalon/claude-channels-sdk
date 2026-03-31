@@ -36,9 +36,12 @@ export const targetsTool = {
                 });
             }
         }
-        // Add connected agents (addressable by their raw UUID from list_agents)
-        for (const [id, agent] of hub.agents) {
-            targets.push({ uuid: id, name: agent.name, kind: "agent", channelType: "agent" });
+        // Add connected agents — use hub.listAgents() so client hubs see daemon's agents too
+        const agentList = (await Promise.resolve(hub.listAgents()));
+        for (const agent of agentList) {
+            if (!targets.some(t => t.uuid === agent.id)) {
+                targets.push({ uuid: agent.id, name: agent.name, kind: "agent", channelType: "agent" });
+            }
         }
         // Add local connections with their remote targets
         const connections = settings.connections ?? [];

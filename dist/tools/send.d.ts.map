@@ -1,1 +1,1 @@
-{"version":3,"file":"send.d.ts","sourceRoot":"","sources":["../../src/tools/send.ts"],"names":[],"mappings":"AAAA;;;GAGG;AACH,OAAO,KAAK,EAAE,cAAc,EAAE,MAAM,YAAY,CAAC;AAEjD,eAAO,MAAM,QAAQ,EAAE,cAwEtB,CAAC"}
+{"version":3,"file":"send.d.ts","sourceRoot":"","sources":["../../src/tools/send.ts"],"names":[],"mappings":"AAAA;;;GAGG;AACH,OAAO,KAAK,EAAE,cAAc,EAAE,MAAM,YAAY,CAAC;AAEjD,eAAO,MAAM,QAAQ,EAAE,cA8EtB,CAAC"}
