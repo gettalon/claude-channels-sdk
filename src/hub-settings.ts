@@ -113,7 +113,9 @@ export async function saveSettings(settings: HubSettings): Promise<void> {
 export async function registerServer(url: string, name: string, port: number): Promise<void> {
   const settings = await loadSettings();
   settings.servers = settings.servers ?? [];
-  settings.servers = settings.servers.filter((s) => s.port !== port);
+  // Only replace entry with the same URL prefix (unix vs ws/http) — preserve other transport entries on the same port
+  const scheme = url.split("://")[0];
+  settings.servers = settings.servers.filter((s) => !(s.port === port && s.url?.startsWith(scheme + "://")));
   settings.servers.push({ url, name, port, pid: process.pid, startedAt: new Date().toISOString() });
   await saveSettings(settings);
 }
