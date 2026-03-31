@@ -119,5 +119,8 @@
     "dist",
     "README.md",
     "LICENSE"
-  ]
+  ],
+  "overrides": {
+    "path-to-regexp": "^8.4.0"
+  }
 }
