@@ -5,7 +5,7 @@ import { randomAgentName, ensureMachineId } from "./hub.js";
 export function installClient(Hub) {
     Hub.prototype.connect = async function (url, agentName, connectionConfig) {
         await ensureMachineId();
-        const name = agentName ?? this.opts.agentName ?? process.env.TALON_AGENT_NAME ?? randomAgentName();
+        const name = agentName ?? this.opts.agentName ?? process.env.TALON_AGENT_NAME ?? this.name ?? randomAgentName();
         if (this.clients.has(url))
             return;
         // Also check if a resolved form of this URL is already connected

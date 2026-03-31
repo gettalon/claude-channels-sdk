@@ -12,7 +12,7 @@ export function installClient(Hub: typeof ChannelHub): void {
 
   Hub.prototype.connect = async function(this: ChannelHub, url: string, agentName?: string, connectionConfig?: Record<string, unknown>): Promise<void> {
     await ensureMachineId();
-    const name = agentName ?? (this as any).opts.agentName ?? process.env.TALON_AGENT_NAME ?? randomAgentName();
+    const name = agentName ?? (this as any).opts.agentName ?? process.env.TALON_AGENT_NAME ?? (this as any).name ?? randomAgentName();
     if (this.clients.has(url)) return;
     // Also check if a resolved form of this URL is already connected
     // (prevents auto://, ws://localhost, unix:// duplicates to the same hub)
