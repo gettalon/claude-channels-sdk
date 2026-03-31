@@ -5,6 +5,11 @@
  * POST /v2/send for outbound, text-based permission prompts with reply.
  */
 
+// NOTE: This legacy channel adapter reads process.env directly.
+// Sanctioned exception: migration to HubConfigService is deferred until
+// the adapter is brought into the active monorepo architecture.
+// See REMAINING_FIXES.md §1 for context.
+
 import { ChannelServer } from "../channel-server.js";
 import type { ChannelPermissionRequest } from "../types.js";
 
