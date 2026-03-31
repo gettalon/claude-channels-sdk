@@ -112,10 +112,13 @@ async function startWebSocket(): Promise<void> {
   const groupName = cfg.wsGroupName();
   const groupAccess = cfg.wsGroupAccess();
   const maxMembers = cfg.wsGroupMaxMembers();
+  const mode = cfg.wsMode();
+  const port = cfg.wsPort();
+  const meshSecret = cfg.meshSecret();
 
   const { channel, cleanup } = await createWebSocketChannel({
-    mode: cfg.wsMode() as "server" | "client" | "both",
-    port: cfg.wsPort(),
+    mode: mode as "server" | "client" | "both",
+    port: port,
     host: cfg.wsHost(),
     url: cfg.wsUrl(),
     agentName: cfg.wsAgentName(),
@@ -123,11 +126,11 @@ async function startWebSocket(): Promise<void> {
     autoReconnect: cfg.wsAutoReconnect(),
     httpEnabled: cfg.wsHttpEnabled(),
     group: groupName ? { name: groupName, access: groupAccess, maxMembers: maxMembers || undefined } : undefined,
-    mesh: cfg.meshSecret() ? {
-      meshSecret: cfg.meshSecret()!,
+    mesh: meshSecret ? {
+      meshSecret: meshSecret,
       deviceId: cfg.meshDeviceId(),
       agentName: cfg.wsAgentName(),
-      port: cfg.wsPort(),
+      port: port,
       mdns: cfg.meshMdns(),
       registryUrl: cfg.meshRegistryUrl(),
       e2e: cfg.meshE2e(),
@@ -136,13 +139,11 @@ async function startWebSocket(): Promise<void> {
 
   await channel.start();
 
-  const mode = cfg.wsMode();
-  const port = cfg.wsPort();
   const features = [
     `mode=${mode}`,
     `port=${port}`,
     groupName ? `group=${groupName}(${groupAccess})` : null,
-    cfg.meshSecret() ? "mesh" : null,
+    meshSecret ? "mesh" : null,
     cfg.meshE2e() ? "e2e" : null,
   ].filter(Boolean).join(", ");
 
