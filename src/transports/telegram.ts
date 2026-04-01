@@ -138,6 +138,9 @@ class TelegramTransport implements Transport {
   /** Cohere API key for voice transcription (STT) */
   cohereApiKey: string | undefined;
 
+  /** Pending tool calls awaiting results */
+  private pendingToolCalls = new Map<string, { tool_name: string; argsPreview: string; timestamp: number }>();
+
   constructor(
     private token: string,
     readonly chatId: string,
@@ -332,14 +335,54 @@ class TelegramTransport implements Transport {
     const silentTypes = ["heartbeat", "heartbeat_ack", "ack", "register", "register_ack", "stream_start", "stream_chunk", "stream_end"];
     if (silentTypes.includes(msg.type)) return;
 
-    // Format tool_call and tool_result for nice display in Telegram
+    // Store tool_call and combine with tool_result into single message
     if (msg.type === "tool_call") {
+      const callId = String(msg.call_id ?? msg.tool_name ?? `call-${Date.now()}`);
       const argsPreview = Object.entries(msg.args || {})
         .map(([ k, v]) => `${k}: ${JSON.stringify(v).slice(0, 50)}`)
         .join("\n  ");
       const argsStr = argsPreview.length > 0 ? `\n${argsPreview}` : "";
-      await this.sendText(`🔧 Tool Call: ${msg.tool_name}${argsStr}`);
-    } else if (msg.type === "tool_result") {
+
+      // Store pending tool call (don't send yet)
+      this.pendingToolCalls.set(callId, {
+        tool_name: msg.tool_name ?? "unknown",
+        argsPreview: argsStr,
+        timestamp: Date.now(),
+      });
+      return; // Wait for result
+    }
+
+    if (msg.type === "tool_result") {
+      const callId = String(msg.call_id ?? "");
+      const pending = this.pendingToolCalls.get(callId);
+
+      if (pending) {
+        // Found matching tool call - send combined message
+        this.pendingToolCalls.delete(callId);
+        const durationMs = Date.now() - pending.timestamp;
+        const durationStr = durationMs < 1000
+          ? `${durationMs}ms`
+          : `${(durationMs / 1000).toFixed(1)}s`;
+
+        let resultPreview: string;
+        if (msg.result) {
+          if (typeof msg.result === "string") {
+            resultPreview = msg.result.slice(0, 200);
+          } else {
+            const json = JSON.stringify(msg.result, null, 2);
+            resultPreview = json.length > 200 ? json.slice(0, 200) + "..." : json;
+          }
+        } else {
+          resultPreview = "...";
+        }
+
+        const header = `🔧 Tool: ${pending.tool_name}${pending.argsPreview}\n⏱ ${durationStr}`;
+        await this.sendText(header + resultPreview);
+        return;
+      }
+
+      // No matching tool call - send as separate messages
+      const toolName = msg.tool_name ?? "unknown";
       let resultPreview: string;
       if (msg.result) {
         if (typeof msg.result === "string") {
@@ -351,7 +394,7 @@ class TelegramTransport implements Transport {
       } else {
         resultPreview = "...";
       }
-      await this.sendText(`✅ Tool Result: ${msg.tool_name ?? "unknown"}\n${resultPreview}`);
+      await this.sendText(`🔧 Tool: ${toolName}\n✅ Result:\n${resultPreview}`);
     } else {
       // Other protocol messages: send as JSON
       await this.sendText(JSON.stringify(message));
