@@ -162,6 +162,110 @@ registerCommand({
         return { text: `Approval failed: ${result.error}` };
     },
 });
+registerCommand({
+    name: "dispatch",
+    description: "Call a tool on an agent: /dispatch <agent> <tool> [jsonArgs]",
+    handler: async (hub, arg) => {
+        const parts = arg?.trim().split(/\s+/) || [];
+        if (parts.length < 2) {
+            return { text: "Usage: /dispatch <agent> <tool> [jsonArgs]\nExample: /dispatch dexter shell_command '{\"cmd\":\"ls\"}'" };
+        }
+        const [agentName, toolName, ...argsParts] = parts;
+        const argsStr = argsParts.join(" ");
+        let args = {};
+        if (argsStr) {
+            try {
+                args = JSON.parse(argsStr);
+            }
+            catch {
+                return { text: `Invalid JSON args: ${argsStr}` };
+            }
+        }
+        // Find agent by name
+        const agent = [...hub.agents.values()].find((a) => a.name === agentName);
+        if (!agent) {
+            return { text: `Agent "${agentName}" not found. Use /agents to list.` };
+        }
+        try {
+            const result = await hub.callRemoteTool(agent.id, toolName, args);
+            const resultStr = typeof result === "object" ? JSON.stringify(result, null, 2) : String(result);
+            const truncated = resultStr.length > 2000 ? resultStr.slice(0, 2000) + "...\n[truncated]" : resultStr;
+            return { text: `✅ ${toolName}:\n${truncated}` };
+        }
+        catch (err) {
+            return { text: `❌ Error: ${err.message}` };
+        }
+    },
+});
+registerCommand({
+    name: "call",
+    description: "Alias for /dispatch: /call <agent> <tool> [jsonArgs]",
+    handler: async (hub, arg, context) => {
+        const dispatchCmd = registry.get("dispatch");
+        return dispatchCmd.handler(hub, arg, context);
+    },
+});
+registerCommand({
+    name: "routes",
+    description: "Show chat routes (which agent handles which chat)",
+    handler: async (hub) => {
+        const routes = hub.chatRoutes;
+        if (!routes.size) {
+            return { text: "No chat routes active." };
+        }
+        const lines = [...routes.entries()].map(([chatId, agentId]) => {
+            const agent = hub.agents.get(agentId);
+            const agentName = agent?.name || agentId;
+            return `• ${chatId} → ${agentName}`;
+        });
+        return { text: `Chat routes:\n${lines.join("\n")}` };
+    },
+});
+registerCommand({
+    name: "ls",
+    description: "List all: agents, channels, routes",
+    handler: async (hub) => {
+        const agents = [...hub.agents.values()];
+        const servers = hub.servers;
+        const channels = servers.size > 0 ? `${servers.size} server(s)` : "no servers";
+        const routes = hub.chatRoutes.size;
+        const lines = [
+            `📊 Hub: ${hub.name}`,
+            ``,
+            `🤖 Agents (${agents.length}):`,
+            ...agents.map((a) => `  • ${a.name}`),
+            ``,
+            `📡 Channels: ${channels}`,
+            `🔀 Routes: ${routes}`,
+        ];
+        return { text: lines.join("\n") };
+    },
+});
+registerCommand({
+    name: "pending",
+    description: "List pending agent approvals",
+    handler: async (hub) => {
+        const pending = [...hub.pendingAgents.entries()];
+        if (!pending.length) {
+            return { text: "No pending approvals." };
+        }
+        const lines = pending.map(([code, p]) => `• ${code} — ${p.name} from ${p.address}`);
+        return { text: `Pending approvals:\n${lines.join("\n")}\n\nUse /approve <code> to approve.` };
+    },
+});
+registerCommand({
+    name: "health",
+    description: "Show health status",
+    handler: async (hub) => {
+        const status = await Promise.resolve(hub.getStatus());
+        const healthy = status.agents !== undefined;
+        return {
+            text: healthy
+                ? `✅ Healthy\nAgents: ${status.agents}\nServers: ${status.servers?.length ?? 0}`
+                : "❌ Hub not responding"
+        };
+    },
+});
 // ── Install onto ChannelHub ──────────────────────────────────────────────────
 export function installCommands(Hub) {
     /** Register a custom command on this hub. */
