@@ -543,11 +543,11 @@ export function installServer(Hub: typeof ChannelHub): void {
     if (existing) {
       id = existing[0];
       try { existing[1].ws.close(); } catch {}
-      this.agents.set(id, { id, name: agentName, tools, ws, lastHeartbeat: Date.now(), address: addr, metadata, allowedChannels: metadata?.allowedChannels as string[] | undefined, intents: metadata?.intents as string[] | undefined });
+      this.agents.set(id, { id, name: agentName, tools, ws, lastHeartbeat: Date.now(), address: addr, metadata, allowedChannels: metadata?.allowedChannels as string[] | undefined, allowedAgents: metadata?.allowedAgents as string[] | undefined, intents: metadata?.intents as string[] | undefined });
       isReconnect = true;
     } else {
       id = (this as any).genId();
-      this.agents.set(id, { id, name: agentName, tools, ws, lastHeartbeat: Date.now(), address: addr, metadata, allowedChannels: metadata?.allowedChannels as string[] | undefined, intents: metadata?.intents as string[] | undefined });
+      this.agents.set(id, { id, name: agentName, tools, ws, lastHeartbeat: Date.now(), address: addr, metadata, allowedChannels: metadata?.allowedChannels as string[] | undefined, allowedAgents: metadata?.allowedAgents as string[] | undefined, intents: metadata?.intents as string[] | undefined });
     }
     ref.id = id;
 

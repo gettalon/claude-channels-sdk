@@ -5,7 +5,7 @@
  * in the hub's routeChat() function.
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { createTestHub, connectRawAgent, waitForEvent, delay } , startTestServer , startTestServer from "./helpers.js";
+import { createTestHub, connectRawAgent, waitForEvent, delay, startTestServer } from "./helpers.js";
 import type { ChannelHub } from "../dist/index.js";
 
 // Use a unique port range to avoid collisions with other test files

@@ -16,6 +16,8 @@ export { ChannelHub } from "./hub.js";
 export { createAgentMcpServer, createArchitectServer } from "./architect.js";
 // Agent config (tools layer)
 export { loadAgentConfig, saveAgentConfig, listAgentConfigs, deleteAgentConfig } from "./agent-config.js";
+// Protocol helpers
+export { serialize, deserialize, serializeBuffer, deserializeBuffer, createEnvelope } from "./protocol.js";
 // Mesh — E2E encryption and peer discovery utilities
 export { generateIdentityKeyPair, loadOrCreateIdentity, deriveSharedSecret, E2eSession, SenderKeySession, MeshDiscovery, MeshRegistry, deriveMeshId, generateMeshSecret, createMeshJwt, verifyMeshJwt, deriveEncryptionKey, parseMeshConfig, } from "./mesh.js";
 //# sourceMappingURL=index.js.map

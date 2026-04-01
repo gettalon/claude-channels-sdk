@@ -1,6 +1,7 @@
 /**
- * send tool — Universal send/reply. Accepts name, channel, agent, chat ID, or UUID.
- * Replaces the former reply tool — handles all addressing modes in one place.
+ * send tool — Send to a target UUID.
+ *
+ * UUID-only — no fallback. Use 'reply' tool for flexible identifiers (names, channels, etc).
  */
 import type { ToolDefinition } from "./types.js";
 export declare const sendTool: ToolDefinition;

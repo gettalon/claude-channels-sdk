@@ -1,6 +1,6 @@
 export const sendTool = {
     name: "send",
-    description: "Send a message to a target UUID (from targets tool).",
+    description: "Send a message to a target UUID. Use 'targets' tool to list available UUIDs. For names/channels, use 'reply' tool instead.",
     inputSchema: {
         type: "object",
         properties: {
@@ -20,7 +20,7 @@ export const sendTool = {
                     },
                     required: ["name"],
                 },
-                description: "File attachments",
+                description: "File attachments"
             },
             buttons: {
                 type: "array",
@@ -33,11 +33,20 @@ export const sendTool = {
                     },
                     required: ["text"],
                 },
-                description: "Interactive buttons",
+                description: "Interactive buttons"
             },
-            reply_to: { type: "string", description: "Message ID to reply to (threaded replies)" },
-            tts: { type: "boolean", description: "Send as voice message (text-to-speech)" },
-            tts_voice: { type: "string", description: "TTS voice name" },
+            reply_to: {
+                type: "string",
+                description: "Message ID to reply to (for threaded replies)"
+            },
+            tts: {
+                type: "boolean",
+                description: "Send as voice message (text-to-speech)"
+            },
+            tts_voice: {
+                type: "string",
+                description: "TTS voice name"
+            }
         },
         required: ["target", "text"],
     },
@@ -54,17 +63,18 @@ export const sendTool = {
         if (args.reply_to)
             rich.reply_to = args.reply_to;
         if (args.tts)
-            rich.meta = { tts: "true", tts_voice: args.tts_voice };
+            rich.tts = args.tts;
+        if (args.tts_voice)
+            rich.tts_voice = args.tts_voice;
         const richOpts = Object.keys(rich).length ? rich : undefined;
-        const content = richOpts ? JSON.stringify({ text, ...rich }) : text;
-        // Resolve UUID via target registry
+        const content = richOpts ? JSON.stringify({ text, ...richOpts }) : text;
+        // Resolve UUID via target registry - UUID ONLY
         const found = ctx.hub.findTarget?.(target);
         if (!found) {
-            // Fall through to sendMessage — handles hub peer proxying for daemon-side agents
-            const r = ctx.hub.sendMessage(target, content);
-            return r.ok
-                ? JSON.stringify({ sent: true, target, via: "proxy" })
-                : JSON.stringify({ sent: false, error: `UUID "${target}" not found. Use targets tool to list available UUIDs.` });
+            return JSON.stringify({
+                sent: false,
+                error: `UUID "${target}" not found in registry. Use 'targets' tool to list available UUIDs.`
+            });
         }
         const rawId = found.rawId;
         if (found.kind === "agent") {

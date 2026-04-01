@@ -16,6 +16,7 @@ export { createAgentMcpServer, createArchitectServer } from "./architect.js";
 export type { AgentMcpOptions, ArchitectOptions } from "./architect.js";
 export { loadAgentConfig, saveAgentConfig, listAgentConfigs, deleteAgentConfig } from "./agent-config.js";
 export type { AgentConfig } from "./types.js";
+export { serialize, deserialize, serializeBuffer, deserializeBuffer, createEnvelope } from "./protocol.js";
 export { generateIdentityKeyPair, loadOrCreateIdentity, deriveSharedSecret, E2eSession, SenderKeySession, MeshDiscovery, MeshRegistry, deriveMeshId, generateMeshSecret, createMeshJwt, verifyMeshJwt, deriveEncryptionKey, parseMeshConfig, } from "./mesh.js";
 export type { MeshConfig, MeshJwtPayload, EncryptedPayload, DiscoveredPeer, SenderKeyBundle, SenderKeyDistribution, SenderKeyEncryptedMessage, } from "./mesh.js";
 //# sourceMappingURL=index.d.ts.map

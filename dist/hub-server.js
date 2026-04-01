@@ -555,12 +555,12 @@ export function installServer(Hub) {
                 existing[1].ws.close();
             }
             catch { }
-            this.agents.set(id, { id, name: agentName, tools, ws, lastHeartbeat: Date.now(), address: addr, metadata, allowedChannels: metadata?.allowedChannels, intents: metadata?.intents });
+            this.agents.set(id, { id, name: agentName, tools, ws, lastHeartbeat: Date.now(), address: addr, metadata, allowedChannels: metadata?.allowedChannels, allowedAgents: metadata?.allowedAgents, intents: metadata?.intents });
             isReconnect = true;
         }
         else {
             id = this.genId();
-            this.agents.set(id, { id, name: agentName, tools, ws, lastHeartbeat: Date.now(), address: addr, metadata, allowedChannels: metadata?.allowedChannels, intents: metadata?.intents });
+            this.agents.set(id, { id, name: agentName, tools, ws, lastHeartbeat: Date.now(), address: addr, metadata, allowedChannels: metadata?.allowedChannels, allowedAgents: metadata?.allowedAgents, intents: metadata?.intents });
         }
         ref.id = id;
         // Auto-register in unified target registry

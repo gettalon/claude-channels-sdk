@@ -81,6 +81,9 @@ export type { AgentMcpOptions, ArchitectOptions } from "./architect.js";
 export { loadAgentConfig, saveAgentConfig, listAgentConfigs, deleteAgentConfig } from "./agent-config.js";
 export type { AgentConfig } from "./types.js";
 
+// Protocol helpers
+export { serialize, deserialize, serializeBuffer, deserializeBuffer, createEnvelope } from "./protocol.js";
+
 // Mesh — E2E encryption and peer discovery utilities
 export {
   generateIdentityKeyPair,

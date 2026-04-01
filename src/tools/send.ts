@@ -1,12 +1,13 @@
 /**
- * send tool — Universal send/reply. Accepts name, channel, agent, chat ID, or UUID.
- * Replaces the former reply tool — handles all addressing modes in one place.
+ * send tool — Send to a target UUID.
+ *
+ * UUID-only — no fallback. Use 'reply' tool for flexible identifiers (names, channels, etc).
  */
 import type { ToolDefinition } from "./types.js";
 
 export const sendTool: ToolDefinition = {
   name: "send",
-  description: "Send a message to a target UUID (from targets tool).",
+  description: "Send a message to a target UUID. Use 'targets' tool to list available UUIDs. For names/channels, use 'reply' tool instead.",
   inputSchema: {
     type: "object",
     properties: {
@@ -26,7 +27,7 @@ export const sendTool: ToolDefinition = {
           },
           required: ["name"],
         },
-        description: "File attachments",
+        description: "File attachments"
       },
       buttons: {
         type: "array",
@@ -39,35 +40,45 @@ export const sendTool: ToolDefinition = {
           },
           required: ["text"],
         },
-        description: "Interactive buttons",
+        description: "Interactive buttons"
       },
-      reply_to: { type: "string", description: "Message ID to reply to (threaded replies)" },
-      tts: { type: "boolean", description: "Send as voice message (text-to-speech)" },
-      tts_voice: { type: "string", description: "TTS voice name" },
+      reply_to: {
+        type: "string",
+        description: "Message ID to reply to (for threaded replies)"
+      },
+      tts: {
+        type: "boolean",
+        description: "Send as voice message (text-to-speech)"
+      },
+      tts_voice: {
+        type: "string",
+        description: "TTS voice name"
+      }
     },
     required: ["target", "text"],
   },
+
   handle: async (args, ctx) => {
     const target = args.target as string;
     const text = args.text as string;
 
     const rich: Record<string, unknown> = {};
-    if (args.format) rich.format = args.format;
-    if (args.files) rich.files = args.files;
-    if (args.buttons) rich.buttons = args.buttons;
-    if (args.reply_to) rich.reply_to = args.reply_to;
-    if (args.tts) rich.meta = { tts: "true", tts_voice: args.tts_voice };
-    const richOpts = Object.keys(rich).length ? rich as any : undefined;
-    const content = richOpts ? JSON.stringify({ text, ...rich }) : text;
+    if (args.format) rich.format = args.format as string;
+    if (args.files) rich.files = args.files as any[];
+    if (args.buttons) rich.buttons = args.buttons as any[];
+    if (args.reply_to) rich.reply_to = args.reply_to as string;
+    if (args.tts) rich.tts = args.tts as boolean;
+    if (args.tts_voice) rich.tts_voice = args.tts_voice as string;
+    const richOpts = Object.keys(rich).length ? rich : undefined;
+    const content = richOpts ? JSON.stringify({ text, ...richOpts }) : text;
 
-    // Resolve UUID via target registry
+    // Resolve UUID via target registry - UUID ONLY
     const found = (ctx.hub as any).findTarget?.(target);
     if (!found) {
-      // Fall through to sendMessage — handles hub peer proxying for daemon-side agents
-      const r = ctx.hub.sendMessage(target, content);
-      return r.ok
-        ? JSON.stringify({ sent: true, target, via: "proxy" })
-        : JSON.stringify({ sent: false, error: `UUID "${target}" not found. Use targets tool to list available UUIDs.` });
+      return JSON.stringify({
+        sent: false,
+        error: `UUID "${target}" not found in registry. Use 'targets' tool to list available UUIDs.`
+      });
     }
 
     const rawId = found.rawId;

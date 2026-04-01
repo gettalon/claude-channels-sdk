@@ -97,7 +97,14 @@ export async function waitForPort(port: number, host: string = "127.0.0.1", time
 }
 
 /** Connect a raw WebSocket client to a hub server. Returns the ws and helpers. */
-export async function connectRawAgent(port: number, agentName: string, tools: any[] = []): Promise<{
+export async function connectRawAgent(
+  port: number,
+  agentName: string,
+  tools: any[] = [],
+  intents: string[] = [],
+  allowedAgents: string[] = [],
+  allowedChannels: string[] = []
+): Promise<{
   ws: any;
   send: (msg: any) => void;
   waitForMsg: (type: string, timeoutMs?: number) => Promise<any>;
@@ -139,8 +146,13 @@ export async function connectRawAgent(port: number, agentName: string, tools: an
     });
   };
 
-  // Register the agent
-  send({ type: "register", agent_name: agentName, tools });
+  // Register the agent with optional intents and authorization in metadata
+  // Note: Using camelCase to match hub-server's extraction logic
+  const metadata: Record<string, any> = {};
+  if (intents.length) metadata.intents = intents;
+  if (allowedAgents.length) metadata.allowedAgents = allowedAgents;
+  if (allowedChannels.length) metadata.allowedChannels = allowedChannels;
+  send({ type: "register", agent_name: agentName, tools, metadata });
 
   return { ws, send, waitForMsg, messages, close: () => ws.close() };
 }
