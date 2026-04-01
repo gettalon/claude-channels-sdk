@@ -8,7 +8,7 @@
  * 4. Prune timer is not duplicated
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { createTestHub, nextPort, delay } from "./helpers.js";
+import { createTestHub, nextPort, delay } , startTestServer , startTestServer from "./helpers.js";
 import { existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
@@ -39,23 +39,23 @@ describe("daemon.pid lifecycle", () => {
 
   it("should write daemon.pid when server starts", async () => {
     expect(existsSync(DAEMON_PID)).toBe(false);
-    await hub.startServer(port);
+    await startTestServer(hub, port);
     expect(existsSync(DAEMON_PID)).toBe(true);
     const pid = parseInt(readFileSync(DAEMON_PID, "utf-8").trim(), 10);
     expect(pid).toBe(process.pid);
   });
 
   it("should not stack signal handlers on repeated startServer calls", async () => {
-    await hub.startServer(port);
+    await startTestServer(hub, port);
     // Second call should return early (already running)
-    const result = await hub.startServer(port);
+    const result = await startTestServer(hub, port);
     expect(result).toEqual({ port });
     // The guard flag should be set
     expect((hub as any)._serverCleanupRegistered).toBe(true);
   });
 
   it("should create prune timer on server start", async () => {
-    await hub.startServer(port);
+    await startTestServer(hub, port);
     expect((hub as any)._pruneTimer).toBeDefined();
   });
 });
@@ -66,7 +66,7 @@ describe("Agent hub (lightweight client)", () => {
   beforeEach(async () => {
     port = nextPort();
     serverHub = createTestHub({ name: "server-hub", port });
-    await serverHub.startServer(port);
+    await startTestServer(serverHub, port);
   });
 
   afterEach(async () => {

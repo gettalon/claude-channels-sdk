@@ -5,7 +5,7 @@
  * handover between agents, multi-agent routing.
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { createTestHub, nextPort, connectRawAgent, delay, waitForEvent } from "./helpers.js";
+import { createTestHub, nextPort, connectRawAgent, delay, waitForEvent, startTestServer } from "./helpers.js";
 import type { ChannelHub } from "../dist/index.js";
 
 let serverHub: ChannelHub;
@@ -17,7 +17,7 @@ describe("Integration: Server + Multiple Clients", () => {
   beforeEach(async () => {
     port = nextPort();
     serverHub = createTestHub({ name: "int-server", port });
-    await serverHub.startServer(port);
+    await startTestServer(serverHub, port);
 
     clientA = createTestHub({ name: "client-a", agentName: "alice" });
     clientB = createTestHub({ name: "client-b", agentName: "bob" });

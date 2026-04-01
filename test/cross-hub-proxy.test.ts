@@ -9,7 +9,7 @@
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { ChannelHub } from "../dist/index.js";
-import { createTestHub, nextPort, delay, connectRawAgent } from "./helpers.js";
+import { createTestHub, nextPort, delay, connectRawAgent, startTestServer } from "./helpers.js";
 
 function cleanupHub(hub: ChannelHub | undefined) {
   if (!hub) return;
@@ -41,8 +41,8 @@ describe("cross-hub message proxy (two hubs)", () => {
     hubA = createTestHub({ name: "proxy-A", port: portA });
     hubB = createTestHub({ name: "proxy-B", port: portB });
 
-    await hubA.startServer(portA);
-    await hubB.startServer(portB);
+    await startTestServer(hubA, portA);
+    await startTestServer(hubB, portB);
     // Hub A connects to Hub B as a client
     await hubA.connect(`ws://localhost:${portB}`, "proxy-A");
     await delay(300);
@@ -104,9 +104,9 @@ describe("cross-hub message proxy (three-hub mesh)", () => {
     hubB = createTestHub({ name: "mesh-B", port: portB });
     hubC = createTestHub({ name: "mesh-C", port: portC });
 
-    await hubA.startServer(portA);
-    await hubB.startServer(portB);
-    await hubC.startServer(portC);
+    await startTestServer(hubA, portA);
+    await startTestServer(hubB, portB);
+    await startTestServer(hubC, portC);
 
     // Full mesh: A connects to B and C; B connects to C
     await hubA.connect(`ws://localhost:${portB}`, "mesh-A");

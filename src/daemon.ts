@@ -17,6 +17,7 @@ import { readFile, writeFile, unlink, mkdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { HubConfigService } from "@gettalon/hub-runtime";
 
 const TALON_DIR = join(homedir(), ".talon");
 const PID_FILE = join(TALON_DIR, "daemon.pid");
@@ -219,7 +220,7 @@ async function runWorker(): Promise<void> {
 
   // 4) If Telegram is configured but not in saved connections, connect it
   const telegramConfig = settings.transports?.telegram as Record<string, unknown> | undefined;
-  const telegramToken = (telegramConfig as any)?.botToken ?? process.env.TELEGRAM_BOT_TOKEN;
+  const telegramToken = (telegramConfig as any)?.botToken ?? HubConfigService.fromEnv().telegramBotToken();
   if (telegramToken) {
     const hasTelegram = [...hub.clients.values()].some(c => c.transport === "telegram");
     if (!hasTelegram) {

@@ -20,6 +20,7 @@ import type { AgentToolDef } from "./protocol.js";
 import { ToolRegistry, text } from "./tools/registry.js";
 import { registerBuiltinTools } from "./tools/index.js";
 import { getAgent, sendToAgent, listRunningAgents } from "./tools/agent-launcher.js";
+import { HubConfigService } from "@gettalon/hub-runtime";
 
 export interface ArchitectOptions {
   name?: string;
@@ -34,13 +35,13 @@ export interface ArchitectOptions {
 }
 
 export async function createArchitectServer(opts: ArchitectOptions = {}): Promise<Server> {
-  // Merge env-var overrides so plugin .mcp.json env passthrough works for
-  // manual Claude Code sessions (TALON_AGENT_NAME, TALON_PORT, etc.)
+  // Merge env-var overrides via HubConfigService for centralized config
+  const cfg = HubConfigService.fromEnv();
   const merged: ArchitectOptions = {
     ...opts,
-    name: opts.name ?? process.env.TALON_AGENT_NAME,
-    port: opts.port ?? (process.env.TALON_PORT ? parseInt(process.env.TALON_PORT, 10) : undefined),
-    agentName: opts.agentName ?? process.env.TALON_AGENT_NAME,
+    name: opts.name ?? cfg.envAgentName,
+    port: opts.port ?? cfg.envPort,
+    agentName: opts.agentName ?? cfg.envAgentName,
   };
   const hub = new ChannelHub(merged);
   const serverName = hub.name;
@@ -150,7 +151,7 @@ export async function createArchitectServer(opts: ArchitectOptions = {}): Promis
   const updateTelegramCommands = async () => {
     try {
       const settings = await hub.loadSettingsSafe();
-      const token = (settings.transports?.telegram as any)?.botToken ?? process.env.TELEGRAM_BOT_TOKEN;
+      const token = (settings.transports?.telegram as any)?.botToken ?? HubConfigService.fromEnv().telegramBotToken();
       if (!token) return;
       const agents = [...hub.agents.values()];
       const commands = [
@@ -484,7 +485,7 @@ export interface AgentMcpOptions {
 
 export async function createAgentMcpServer(opts: AgentMcpOptions = {}): Promise<Server> {
   const { basename } = await import("node:path");
-  const agentName = opts.name ?? process.env.TALON_AGENT_NAME ?? basename(process.cwd()) ?? "agent";
+  const agentName = opts.name ?? HubConfigService.fromEnv().envAgentName ?? basename(process.cwd()) ?? "agent";
   const port = opts.port ?? 9090;
   const socketPath = `/tmp/talon-${port}.sock`;
 

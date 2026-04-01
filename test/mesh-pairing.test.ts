@@ -5,7 +5,7 @@
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { ChannelHub } from "../dist/index.js";
-import { createTestHub, nextPort, delay, waitForEvent, connectRawAgent } from "./helpers.js";
+import { createTestHub, nextPort, delay, waitForEvent, connectRawAgent, startTestServer } from "./helpers.js";
 import { writeFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -49,7 +49,7 @@ describe("hub-to-hub pairing notifications", () => {
     const { setSettingsPath } = await import("../dist/hub-settings.js");
     setSettingsPath(join(settingsDir, "settings.json"));
 
-    await hubB.startServer(portB);
+    await startTestServer(hubB, portB);
   });
 
   afterEach(async () => {

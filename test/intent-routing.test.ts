@@ -5,7 +5,7 @@
  * based on content keywords/intents, not just @mention.
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { createTestHub, connectRawAgent, waitForEvent, delay } from "./helpers.js";
+import { createTestHub, connectRawAgent, waitForEvent, delay } , startTestServer , startTestServer from "./helpers.js";
 import type { ChannelHub } from "../dist/index.js";
 
 // Use a unique port range to avoid collisions with other test files
@@ -72,7 +72,7 @@ describe("Intent-based Routing", () => {
   beforeEach(async () => {
     port = nextIntentPort();
     hub = createTestHub({ name: "intent-route-test", port });
-    await hub.startServer(port);
+    await startTestServer(hub, port);
   });
 
   afterEach(async () => {

@@ -9,7 +9,7 @@
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { ChannelHub } from "../dist/index.js";
-import { createTestHub, nextPort, delay, connectRawAgent } from "./helpers.js";
+import { createTestHub, nextPort, delay, connectRawAgent } , startTestServer , startTestServer from "./helpers.js";
 
 function cleanupHub(hub: ChannelHub) {
   (hub as any).stopHealthMonitor?.();
@@ -24,7 +24,7 @@ describe("flood deduplication (msgId seen-set)", () => {
   beforeEach(async () => {
     port = nextPort();
     hub = createTestHub({ name: "dedup-hub" });
-    await hub.startServer(port);
+    await startTestServer(hub, port);
   });
   afterEach(() => cleanupHub(hub));
 

@@ -2,7 +2,7 @@
  * Tests for daemon status, approval/pairing flow, and per-agent config.
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { createTestHub, nextPort, connectRawAgent, delay, waitForEvent } from "./helpers.js";
+import { createTestHub, nextPort, connectRawAgent, delay, waitForEvent, startTestServer } from "./helpers.js";
 import {
   ChannelHub,
   daemonStatus,
@@ -57,7 +57,7 @@ describe("Approval / Pairing flow", () => {
     // Save settings with requireApproval = true BEFORE starting server
     await hub.saveSettings({ access: { requireApproval: true } });
 
-    await hub.startServer(port);
+    await startTestServer(hub, port);
   });
 
   afterEach(async () => {

@@ -5,13 +5,9 @@
  * rich text messages, interactive card buttons for permission prompts.
  */
 
-// NOTE: This legacy channel adapter reads process.env directly.
-// Sanctioned exception: migration to HubConfigService is deferred until
-// the adapter is brought into the active monorepo architecture.
-// See REMAINING_FIXES.md §1 for context.
-
 import { ChannelServer } from "../channel-server.js";
 import type { ChannelServerOptions, ChannelPermissionRequest } from "../types.js";
+import { HubConfigService } from "@gettalon/hub-runtime";
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
@@ -21,8 +17,9 @@ export interface FeishuConfig {
 }
 
 export function parseConfig(): FeishuConfig {
-  const appId = process.env.FEISHU_APP_ID ?? "";
-  const appSecret = process.env.FEISHU_APP_SECRET ?? "";
+  const cfg = HubConfigService.fromEnv();
+  const appId = cfg.feishuAppId();
+  const appSecret = cfg.feishuAppSecret();
 
   if (!appId) throw new Error("FEISHU_APP_ID is required");
   if (!appSecret) throw new Error("FEISHU_APP_SECRET is required");
@@ -364,7 +361,7 @@ export async function createFeishuChannel(
     });
   });
 
-  const port = parseInt(process.env.FEISHU_WEBHOOK_PORT ?? "9000", 10);
+  const port = HubConfigService.fromEnv().feishuWebhookPort();
   await new Promise<void>((resolve) => {
     eventServer.listen(port, () => {
       process.stderr.write(`[feishu] Event server listening on port ${port}\n`);

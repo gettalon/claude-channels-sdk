@@ -6,13 +6,9 @@
  * text-based permission prompts with reply buttons.
  */
 
-// NOTE: This legacy channel adapter reads process.env directly.
-// Sanctioned exception: migration to HubConfigService is deferred until
-// the adapter is brought into the active monorepo architecture.
-// See REMAINING_FIXES.md §1 for context.
-
 import { ChannelServer } from "../channel-server.js";
 import type { ChannelPermissionRequest } from "../types.js";
+import { HubConfigService } from "@gettalon/hub-runtime";
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
@@ -21,7 +17,8 @@ export interface WhatsAppConfig {
 }
 
 export function parseConfig(): WhatsAppConfig {
-  const sessionPath = process.env.WHATSAPP_SESSION_PATH ?? "./whatsapp-session";
+  const cfg = HubConfigService.fromEnv();
+  const sessionPath = cfg.whatsappSessionPath();
   return { sessionPath };
 }
 

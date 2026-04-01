@@ -4,15 +4,13 @@
  * Uses matrix-js-sdk. Room timeline events for inbound, HTML formatted messages
  * with chunking, reaction emoji permission prompts, extra tools: matrix_react, matrix_room.
  */
-// NOTE: This legacy channel adapter reads process.env directly.
-// Sanctioned exception: migration to HubConfigService is deferred until
-// the adapter is brought into the active monorepo architecture.
-// See REMAINING_FIXES.md §1 for context.
 import { ChannelServer } from "../channel-server.js";
+import { HubConfigService } from "@gettalon/hub-runtime";
 export function parseConfig() {
-    const homeserver = process.env.MATRIX_HOMESERVER ?? "";
-    const accessToken = process.env.MATRIX_ACCESS_TOKEN ?? "";
-    const userId = process.env.MATRIX_USER_ID ?? "";
+    const cfg = HubConfigService.fromEnv();
+    const homeserver = cfg.matrixHomeserver();
+    const accessToken = cfg.matrixAccessToken();
+    const userId = cfg.matrixUserId();
     if (!homeserver)
         throw new Error("MATRIX_HOMESERVER is required");
     if (!accessToken)

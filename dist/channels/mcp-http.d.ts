@@ -14,7 +14,7 @@ import { ChannelServer } from "../channel-server.js";
 export interface McpHttpConfig {
     /** Port to listen on (default: 3100) */
     port?: number;
-    /** Host to bind to (default: "0.0.0.0") */
+    /** Host to bind to (default: "127.0.0.1") */
     host?: string;
     /** Bearer token for authentication (optional) */
     bearerToken?: string;

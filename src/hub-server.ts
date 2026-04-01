@@ -161,7 +161,7 @@ export function installServer(Hub: typeof ChannelHub): void {
       res.writeHead(404); res.end("not found");
     });
 
-    const bindHost = host ?? (this as any).opts?.host ?? "0.0.0.0";
+    const bindHost = host ?? (this as any).opts?.host ?? "127.0.0.1";
     await new Promise<void>((resolve, reject) => { httpServer.on("error", reject); httpServer.listen(p, bindHost, resolve); });
     const wss = new WebSocketServer({ server: httpServer });
     wss.on("connection", (ws: any, req: any) => (this as any).setupAgentConnection(ws, req.socket.remoteAddress ?? "unknown"));

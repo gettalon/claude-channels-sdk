@@ -11,15 +11,17 @@
  * - CORS support
  */
 import { ChannelServer } from "../channel-server.js";
+import { HubConfigService } from "@gettalon/hub-runtime";
 // ── Parse Config ───────────────────────────────────────────────────────────────
 export function parseConfig() {
+    const cfg = HubConfigService.fromEnv();
     return {
-        port: parseInt(process.env.MCP_HTTP_PORT ?? "3100", 10),
-        host: process.env.MCP_HTTP_HOST ?? "0.0.0.0",
-        bearerToken: process.env.MCP_HTTP_TOKEN,
-        corsOrigins: process.env.MCP_HTTP_CORS ?? "*",
-        basePath: process.env.MCP_HTTP_PATH ?? "/mcp",
-        agentName: process.env.MCP_HTTP_AGENT_NAME ?? "mcp-http-agent",
+        port: cfg.mcpHttpPort(),
+        host: cfg.mcpHttpHost(),
+        bearerToken: cfg.mcpHttpToken(),
+        corsOrigins: cfg.mcpHttpCors() ?? "*",
+        basePath: cfg.mcpHttpPath(),
+        agentName: cfg.mcpHttpAgentName(),
     };
 }
 // ── Create Channel ─────────────────────────────────────────────────────────────
@@ -27,7 +29,7 @@ export async function createMcpHttpChannel(config) {
     const http = await import("node:http");
     const cfg = { ...parseConfig(), ...config };
     const port = cfg.port ?? 3100;
-    const host = cfg.host ?? "0.0.0.0";
+    const host = cfg.host ?? "127.0.0.1";
     const basePath = (cfg.basePath ?? "/mcp").replace(/\/+$/, "");
     // SSE clients
     const sseClients = new Map();

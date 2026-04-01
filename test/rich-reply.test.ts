@@ -6,7 +6,7 @@
  * by agents.
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { createTestHub, nextPort, connectRawAgent, waitForEvent, delay } from "./helpers.js";
+import { createTestHub, nextPort, connectRawAgent, waitForEvent, delay } , startTestServer , startTestServer from "./helpers.js";
 import type { ChannelHub } from "../dist/index.js";
 
 let hub: ChannelHub;
@@ -16,7 +16,7 @@ describe("Rich reply parameters", () => {
   beforeEach(async () => {
     port = nextPort();
     hub = createTestHub({ name: "rich-test-server", port });
-    await hub.startServer(port);
+    await startTestServer(hub, port);
   });
 
   afterEach(async () => {

@@ -5,13 +5,9 @@
  * button components for permission prompts, extra tools: discord_react, discord_thread, discord_edit.
  */
 
-// NOTE: This legacy channel adapter reads process.env directly.
-// Sanctioned exception: migration to HubConfigService is deferred until
-// the adapter is brought into the active monorepo architecture.
-// See REMAINING_FIXES.md §1 for context.
-
 import { ChannelServer } from "../channel-server.js";
 import type { ChannelServerOptions, ChannelPermissionRequest } from "../types.js";
+import { HubConfigService } from "@gettalon/hub-runtime";
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
@@ -21,13 +17,11 @@ export interface DiscordConfig {
 }
 
 export function parseConfig(): DiscordConfig {
-  const token = process.env.DISCORD_TOKEN ?? "";
+  const cfg = HubConfigService.fromEnv();
+  const token = cfg.discordToken();
   if (!token) throw new Error("DISCORD_TOKEN is required");
 
-  const allowedChannels = process.env.DISCORD_ALLOWED_CHANNELS
-    ?.split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
+  const allowedChannels = cfg.discordAllowedChannels();
 
   return { token, allowedChannels };
 }

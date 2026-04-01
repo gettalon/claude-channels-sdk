@@ -5,7 +5,7 @@
  * health monitor snapshots, and settings read-merge-write.
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { createTestHub, nextPort, makeTempDir, cleanTempDir, delay, connectRawAgent } from "./helpers.js";
+import { createTestHub, nextPort, makeTempDir, cleanTempDir, delay, connectRawAgent } , startTestServer , startTestServer from "./helpers.js";
 import { ChannelHub } from "../dist/index.js";
 import { setSettingsPath, loadSettings, saveSettings } from "../dist/hub-settings.js";
 import { writeFile, readFile, unlink } from "node:fs/promises";
@@ -25,7 +25,7 @@ describe("Handover persistence (persistState / restoreState)", () => {
     setSettingsPath(settingsFile);
     port = nextPort();
     hub = createTestHub({ name: "persist-hub", port });
-    await hub.startServer(port);
+    await startTestServer(hub, port);
   });
 
   afterEach(async () => {
@@ -317,7 +317,7 @@ describe("Health monitor", () => {
     setSettingsPath(settingsFile);
     port = nextPort();
     hub = createTestHub({ name: "health-hub", port });
-    await hub.startServer(port);
+    await startTestServer(hub, port);
   });
 
   afterEach(async () => {

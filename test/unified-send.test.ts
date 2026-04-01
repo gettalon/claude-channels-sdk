@@ -5,7 +5,7 @@
  * reply + send_message with built-in contact name resolution.
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { createTestHub, connectRawAgent, waitForEvent, delay } from "./helpers.js";
+import { createTestHub, connectRawAgent, waitForEvent, delay } , startTestServer , startTestServer from "./helpers.js";
 import type { ChannelHub } from "../dist/index.js";
 
 // Use a unique port range to avoid collisions with other test files
@@ -19,7 +19,7 @@ describe("Unified send tool (via ChannelHub)", () => {
   beforeEach(async () => {
     port = nextSendPort();
     hub = createTestHub({ name: "send-test-server", port });
-    await hub.startServer(port);
+    await startTestServer(hub, port);
   });
 
   afterEach(async () => {

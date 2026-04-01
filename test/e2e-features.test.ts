@@ -9,7 +9,7 @@
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { ChannelHub } from "../dist/index.js";
-import { createTestHub, nextPort, delay, waitForEvent, connectRawAgent } from "./helpers.js";
+import { createTestHub, nextPort, delay, waitForEvent, connectRawAgent, startTestServer } from "./helpers.js";
 import { basename } from "node:path";
 
 // ── Cleanup helper ──────────────────────────────────────────────────────────
@@ -53,7 +53,7 @@ describe("@mention routing", () => {
       }
     });
 
-    await hub.startServer(port);
+    await startTestServer(hub, port);
   });
 
   afterEach(() => cleanupHub(hub));
@@ -119,7 +119,7 @@ describe("~blocked-by routing", () => {
       }
     });
 
-    await hub.startServer(port);
+    await startTestServer(hub, port);
   });
 
   afterEach(() => cleanupHub(hub));
@@ -153,7 +153,7 @@ describe("message buffering", () => {
   beforeEach(async () => {
     port = nextPort();
     hub = createTestHub({ name: "hub", port });
-    await hub.startServer(port);
+    await startTestServer(hub, port);
   });
 
   afterEach(() => cleanupHub(hub));
@@ -250,7 +250,7 @@ describe("alias resolution", () => {
   beforeEach(async () => {
     port = nextPort();
     hub = createTestHub({ name: "hub", port });
-    await hub.startServer(port);
+    await startTestServer(hub, port);
   });
 
   afterEach(() => cleanupHub(hub));
@@ -313,7 +313,7 @@ describe("init batching", () => {
     });
 
     // Start the server — this emits "serverStarted"
-    await hub.startServer(port);
+    await startTestServer(hub, port);
 
     // Simulate a "connected" event before init is done
     hub.emit("connected", { url: `ws://localhost:${port}`, transport: "ws", name: "test-conn" });

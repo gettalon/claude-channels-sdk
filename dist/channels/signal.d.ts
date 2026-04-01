@@ -2,7 +2,7 @@
  * Signal Channel Adapter
  *
  * Uses signal-cli REST API (HTTP client). Polling /v1/receive for inbound,
- * POST /v2/send for outbound, text-based permission prompts with reply.
+ * POST /v2/send for outbound. text-based permission prompts with reply.
  */
 import { ChannelServer } from "../channel-server.js";
 export interface SignalConfig {

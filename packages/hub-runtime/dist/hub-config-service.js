@@ -57,6 +57,36 @@ function snapshotEnv() {
         MESH_MDNS: process.env.MESH_MDNS,
         MESH_REGISTRY_URL: process.env.MESH_REGISTRY_URL,
         MESH_E2E: process.env.MESH_E2E,
+        // ── Legacy channels ──────────────────────────────────────────────────────
+        MATRIX_HOMESERVER: process.env.MATRIX_HOMESERVER,
+        MATRIX_ACCESS_TOKEN: process.env.MATRIX_ACCESS_TOKEN,
+        MATRIX_USER_ID: process.env.MATRIX_USER_ID,
+        DISCORD_TOKEN: process.env.DISCORD_TOKEN,
+        DISCORD_ALLOWED_CHANNELS: process.env.DISCORD_ALLOWED_CHANNELS,
+        SLACK_BOT_TOKEN: process.env.SLACK_BOT_TOKEN,
+        SLACK_APP_TOKEN: process.env.SLACK_APP_TOKEN,
+        SLACK_SIGNING_SECRET: process.env.SLACK_SIGNING_SECRET,
+        IRC_SERVER: process.env.IRC_SERVER,
+        IRC_PORT: process.env.IRC_PORT,
+        IRC_NICK: process.env.IRC_NICK,
+        IRC_CHANNELS: process.env.IRC_CHANNELS,
+        IRC_PASSWORD: process.env.IRC_PASSWORD,
+        IRC_TLS: process.env.IRC_TLS,
+        SIGNAL_CLI_URL: process.env.SIGNAL_CLI_URL,
+        SIGNAL_PHONE_NUMBER: process.env.SIGNAL_PHONE_NUMBER,
+        WHATSAPP_SESSION_PATH: process.env.WHATSAPP_SESSION_PATH,
+        LINE_CHANNEL_ACCESS_TOKEN: process.env.LINE_CHANNEL_ACCESS_TOKEN,
+        LINE_CHANNEL_SECRET: process.env.LINE_CHANNEL_SECRET,
+        LINE_WEBHOOK_PORT: process.env.LINE_WEBHOOK_PORT,
+        FEISHU_APP_ID: process.env.FEISHU_APP_ID,
+        FEISHU_APP_SECRET: process.env.FEISHU_APP_SECRET,
+        FEISHU_WEBHOOK_PORT: process.env.FEISHU_WEBHOOK_PORT,
+        IMESSAGE_POLL_INTERVAL: process.env.IMESSAGE_POLL_INTERVAL,
+        IMESSAGE_ALLOWED_CONTACTS: process.env.IMESSAGE_ALLOWED_CONTACTS,
+        IMESSAGE_CHAT_DB_PATH: process.env.IMESSAGE_CHAT_DB_PATH,
+        TEAMS_APP_ID: process.env.TEAMS_APP_ID,
+        TEAMS_APP_PASSWORD: process.env.TEAMS_APP_PASSWORD,
+        TEAMS_PORT: process.env.TEAMS_PORT,
     };
 }
 // ── HubConfigService ─────────────────────────────────────────────────────
@@ -308,6 +338,55 @@ export class HubConfigService {
     meshE2e() {
         return this.env.MESH_E2E === "true";
     }
+    // ── Legacy channel accessors ───────────────────────────────────────────────────
+    // Matrix
+    matrixHomeserver() { return this.env.MATRIX_HOMESERVER ?? ""; }
+    matrixAccessToken() { return this.env.MATRIX_ACCESS_TOKEN ?? ""; }
+    matrixUserId() { return this.env.MATRIX_USER_ID ?? ""; }
+    // Discord
+    discordToken() { return this.env.DISCORD_TOKEN ?? ""; }
+    discordAllowedChannels() {
+        const raw = this.env.DISCORD_ALLOWED_CHANNELS;
+        return raw ? raw.split(",").map(s => s.trim()).filter(Boolean) : [];
+    }
+    // Slack
+    slackBotToken() { return this.env.SLACK_BOT_TOKEN ?? ""; }
+    slackAppToken() { return this.env.SLACK_APP_TOKEN ?? ""; }
+    slackSigningSecret() { return this.env.SLACK_SIGNING_SECRET ?? ""; }
+    // IRC
+    ircServer() { return this.env.IRC_SERVER ?? ""; }
+    ircPort() { return parseInt(this.env.IRC_PORT ?? "6667", 10); }
+    ircNick() { return this.env.IRC_NICK ?? ""; }
+    ircChannels() {
+        const raw = this.env.IRC_CHANNELS;
+        return raw ? raw.split(",").map(s => s.trim()).filter(Boolean) : [];
+    }
+    ircPassword() { return this.env.IRC_PASSWORD; }
+    ircTls() { return this.env.IRC_TLS === "true"; }
+    // Signal
+    signalCliUrl() { return this.env.SIGNAL_CLI_URL ?? "http://127.0.0.1:8080"; }
+    signalPhoneNumber() { return this.env.SIGNAL_PHONE_NUMBER ?? ""; }
+    // WhatsApp
+    whatsappSessionPath() { return this.env.WHATSAPP_SESSION_PATH ?? "./whatsapp-session"; }
+    // LINE
+    lineChannelAccessToken() { return this.env.LINE_CHANNEL_ACCESS_TOKEN ?? ""; }
+    lineChannelSecret() { return this.env.LINE_CHANNEL_SECRET ?? ""; }
+    lineWebhookPort() { return parseInt(this.env.LINE_WEBHOOK_PORT ?? "3000", 10); }
+    // Feishu
+    feishuAppId() { return this.env.FEISHU_APP_ID ?? ""; }
+    feishuAppSecret() { return this.env.FEISHU_APP_SECRET ?? ""; }
+    feishuWebhookPort() { return parseInt(this.env.FEISHU_WEBHOOK_PORT ?? "9000", 10); }
+    // iMessage
+    imessagePollInterval() { return parseInt(this.env.IMESSAGE_POLL_INTERVAL ?? "5000", 10); }
+    imessageAllowedContacts() {
+        const raw = this.env.IMESSAGE_ALLOWED_CONTACTS;
+        return raw ? raw.split(",").map(s => s.trim()).filter(Boolean) : undefined;
+    }
+    imessageChatDbPath() { return this.env.IMESSAGE_CHAT_DB_PATH; }
+    // MS Teams
+    teamsAppId() { return this.env.TEAMS_APP_ID ?? ""; }
+    teamsAppPassword() { return this.env.TEAMS_APP_PASSWORD ?? ""; }
+    teamsPort() { return parseInt(this.env.TEAMS_PORT ?? "3978", 10); }
     // ── Talon bootstrap accessor ─────────────────────────────────────────
     /** TALON_CHANNEL value for platform adapter selection (lowercased). */
     talonChannel() {

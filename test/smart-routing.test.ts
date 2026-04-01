@@ -5,7 +5,7 @@
  * in the hub's routeChat() function.
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { createTestHub, connectRawAgent, waitForEvent, delay } from "./helpers.js";
+import { createTestHub, connectRawAgent, waitForEvent, delay } , startTestServer , startTestServer from "./helpers.js";
 import type { ChannelHub } from "../dist/index.js";
 
 // Use a unique port range to avoid collisions with other test files
@@ -19,7 +19,7 @@ describe("Smart Routing (@agent mention bypass)", () => {
   beforeEach(async () => {
     port = nextSmartPort();
     hub = createTestHub({ name: "smart-route-test", port });
-    await hub.startServer(port);
+    await startTestServer(hub, port);
   });
 
   afterEach(async () => {
@@ -89,7 +89,7 @@ describe("Smart Routing (@agent mention bypass)", () => {
 
     port = nextSmartPort();
     hub = createTestHub({ name: "bot-strip-test", port, botUsername: "HomeClaudeh_bot" } as any);
-    await hub.startServer(port);
+    await startTestServer(hub, port);
 
     const messageEvents: any[] = [];
     hub.on("message", (evt: any) => messageEvents.push(evt));
@@ -168,7 +168,7 @@ describe("Smart Routing (@agent mention bypass)", () => {
 
     port = nextSmartPort();
     hub = createTestHub({ name: "combo-test", port, botUsername: "MyBot" } as any);
-    await hub.startServer(port);
+    await startTestServer(hub, port);
 
     const agent = await connectRawAgent(port, "finance");
     const ack = await agent.waitForMsg("register_ack");

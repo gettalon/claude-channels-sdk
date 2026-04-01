@@ -5,7 +5,7 @@
  * that resolve to the same hub results in only 1 client entry.
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { createTestHub, nextPort, delay } from "./helpers.js";
+import { createTestHub, nextPort, delay } , startTestServer , startTestServer from "./helpers.js";
 import { unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
@@ -22,7 +22,7 @@ describe("Client connection dedup", () => {
   beforeEach(async () => {
     port = nextPort();
     serverHub = createTestHub({ name: "dedup-server", port });
-    await serverHub.startServer(port);
+    await startTestServer(serverHub, port);
   });
 
   afterEach(async () => {

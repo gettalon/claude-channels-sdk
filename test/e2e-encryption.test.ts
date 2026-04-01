@@ -17,7 +17,7 @@ import type {
   SenderKeyBundle,
   SenderKeyEncryptedMessage,
 } from "../dist/index.js";
-import { createTestHub, nextPort, delay, connectRawAgent } from "./helpers.js";
+import { createTestHub, nextPort, delay, connectRawAgent } , startTestServer , startTestServer from "./helpers.js";
 import type { ChannelHub } from "../dist/index.js";
 
 function cleanupHub(hub: ChannelHub | undefined) {
@@ -78,7 +78,7 @@ describe("hub E2E transport encryption", () => {
   beforeEach(async () => {
     port = nextPort();
     hub = createTestHub({ name: "e2e-hub", port });
-    await hub.startServer(port);
+    await startTestServer(hub, port);
   });
 
   afterEach(() => cleanupHub(hub));

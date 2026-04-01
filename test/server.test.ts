@@ -5,7 +5,7 @@
  * routing, handover, groups, approval/pairing.
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { createTestHub, nextPort, connectRawAgent, waitForEvent, delay } from "./helpers.js";
+import { createTestHub, nextPort, connectRawAgent, waitForEvent, delay, startTestServer } from "./helpers.js";
 import type { ChannelHub } from "../dist/index.js";
 
 let hub: ChannelHub;
@@ -15,7 +15,7 @@ describe("ChannelHub Server Mode", () => {
   beforeEach(async () => {
     port = nextPort();
     hub = createTestHub({ name: "test-server", port });
-    await hub.startServer(port);
+    await startTestServer(hub, port);
   });
 
   afterEach(async () => {

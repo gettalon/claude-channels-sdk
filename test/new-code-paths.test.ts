@@ -5,7 +5,7 @@
  * 3. channelForChat population in hub-client.ts
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { createTestHub, nextPort, delay, waitForEvent, connectRawAgent } from "./helpers.js";
+import { createTestHub, nextPort, delay, waitForEvent, connectRawAgent } , startTestServer , startTestServer from "./helpers.js";
 import type { ChannelHub } from "../dist/index.js";
 
 // ── 1. call_tool proxy in client mode ──────────────────────────────────────
@@ -18,7 +18,7 @@ describe("call_tool proxy in client mode", () => {
   beforeEach(async () => {
     port = nextPort();
     serverHub = createTestHub({ name: "calltool-server", port });
-    await serverHub.startServer(port);
+    await startTestServer(serverHub, port);
 
     clientHub = createTestHub({ name: "calltool-client", port, agentName: "proxy-caller" });
     await clientHub.connect(`ws://localhost:${port}`, "proxy-caller");
@@ -110,7 +110,7 @@ describe("send tool (UUID-only) and reply tool (name resolution)", () => {
   beforeEach(async () => {
     port = nextPort();
     hub = createTestHub({ name: "send-persist-server", port });
-    await hub.startServer(port);
+    await startTestServer(hub, port);
   });
 
   afterEach(async () => {
@@ -206,7 +206,7 @@ describe("channelForChat population from channel transport", () => {
   beforeEach(async () => {
     port = nextPort();
     serverHub = createTestHub({ name: "channel-track-server", port });
-    await serverHub.startServer(port);
+    await startTestServer(serverHub, port);
   });
 
   afterEach(async () => {

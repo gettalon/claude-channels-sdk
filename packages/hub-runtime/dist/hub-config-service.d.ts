@@ -135,6 +135,35 @@ export declare class HubConfigService {
     meshRegistryUrl(): string | undefined;
     /** Whether E2E encryption is enabled (default false). */
     meshE2e(): boolean;
+    matrixHomeserver(): string;
+    matrixAccessToken(): string;
+    matrixUserId(): string;
+    discordToken(): string;
+    discordAllowedChannels(): string[];
+    slackBotToken(): string;
+    slackAppToken(): string;
+    slackSigningSecret(): string;
+    ircServer(): string;
+    ircPort(): number;
+    ircNick(): string;
+    ircChannels(): string[];
+    ircPassword(): string | undefined;
+    ircTls(): boolean;
+    signalCliUrl(): string;
+    signalPhoneNumber(): string;
+    whatsappSessionPath(): string;
+    lineChannelAccessToken(): string;
+    lineChannelSecret(): string;
+    lineWebhookPort(): number;
+    feishuAppId(): string;
+    feishuAppSecret(): string;
+    feishuWebhookPort(): number;
+    imessagePollInterval(): number;
+    imessageAllowedContacts(): string[] | undefined;
+    imessageChatDbPath(): string | undefined;
+    teamsAppId(): string;
+    teamsAppPassword(): string;
+    teamsPort(): number;
     /** TALON_CHANNEL value for platform adapter selection (lowercased). */
     talonChannel(): string | undefined;
     /** Whether auto-start server is disabled (TALON_NO_SERVER=1). */

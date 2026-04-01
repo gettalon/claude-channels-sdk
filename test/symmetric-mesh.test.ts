@@ -9,7 +9,7 @@
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { ChannelHub } from "../dist/index.js";
-import { createTestHub, nextPort, delay, connectRawAgent } from "./helpers.js";
+import { createTestHub, nextPort, delay, connectRawAgent, startTestServer } from "./helpers.js";
 
 function cleanupHub(hub: ChannelHub) {
   (hub as any).stopHealthMonitor?.();
@@ -34,9 +34,9 @@ describe("symmetric 3-hub mesh (all ↔ all)", () => {
     hubB = createTestHub({ name: "sym-B" });
     hubC = createTestHub({ name: "sym-C" });
 
-    await hubA.startServer(portA);
-    await hubB.startServer(portB);
-    await hubC.startServer(portC);
+    await startTestServer(hubA, portA);
+    await startTestServer(hubB, portB);
+    await startTestServer(hubC, portC);
 
     // Full symmetric mesh: every hub connects TO every other hub
     await hubA.connect(`ws://localhost:${portB}`, "sym-A");

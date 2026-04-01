@@ -10,7 +10,7 @@
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { ChannelHub } from "../dist/index.js";
-import { createTestHub, nextPort, delay, connectRawAgent } from "./helpers.js";
+import { createTestHub, nextPort, delay, connectRawAgent, startTestServer } from "./helpers.js";
 
 function cleanupHub(hub: ChannelHub | undefined) {
   if (!hub) return;
@@ -46,8 +46,8 @@ describe("multi-hub many-to-many (UUID targeting)", () => {
     portA = nextPort(); portB = nextPort();
     hubA = createTestHub({ name: "mm-A" });
     hubB = createTestHub({ name: "mm-B" });
-    await hubA.startServer(portA);
-    await hubB.startServer(portB);
+    await startTestServer(hubA, portA);
+    await startTestServer(hubB, portB);
     await hubA.connect(`ws://localhost:${portB}`, "mm-A");
     await delay(300);
   });
@@ -128,7 +128,7 @@ describe("@mention routing (single hub)", () => {
   beforeEach(async () => {
     port = nextPort();
     hub = createTestHub({ name: "mention-hub" });
-    await hub.startServer(port);
+    await startTestServer(hub, port);
   });
   afterEach(() => cleanupHub(hub));
 
@@ -208,8 +208,8 @@ describe("@mention routing (cross-hub)", () => {
     portA = nextPort(); portB = nextPort();
     hubA = createTestHub({ name: "xm-A" });
     hubB = createTestHub({ name: "xm-B" });
-    await hubA.startServer(portA);
-    await hubB.startServer(portB);
+    await startTestServer(hubA, portA);
+    await startTestServer(hubB, portB);
     await hubA.connect(`ws://localhost:${portB}`, "xm-A");
     await delay(300);
   });
@@ -265,7 +265,7 @@ describe("group broadcast (single hub, multiple agents)", () => {
   beforeEach(async () => {
     port = nextPort();
     hub = createTestHub({ name: "group-hub" });
-    await hub.startServer(port);
+    await startTestServer(hub, port);
   });
   afterEach(() => cleanupHub(hub));
 
@@ -345,8 +345,8 @@ describe("multi-hub group broadcast", () => {
     portA = nextPort(); portB = nextPort();
     hubA = createTestHub({ name: "mhg-A" });
     hubB = createTestHub({ name: "mhg-B" });
-    await hubA.startServer(portA);
-    await hubB.startServer(portB);
+    await startTestServer(hubA, portA);
+    await startTestServer(hubB, portB);
     await hubA.connect(`ws://localhost:${portB}`, "mhg-A");
     await delay(300);
   });

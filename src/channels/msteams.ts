@@ -5,13 +5,9 @@
  * Adaptive Cards for messages and permission prompts.
  */
 
-// NOTE: This legacy channel adapter reads process.env directly.
-// Sanctioned exception: migration to HubConfigService is deferred until
-// the adapter is brought into the active monorepo architecture.
-// See REMAINING_FIXES.md §1 for context.
-
 import { ChannelServer } from "../channel-server.js";
 import type { ChannelServerOptions, ChannelPermissionRequest } from "../types.js";
+import { HubConfigService } from "@gettalon/hub-runtime";
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
@@ -22,9 +18,10 @@ export interface TeamsConfig {
 }
 
 export function parseConfig(): TeamsConfig {
-  const appId = process.env.TEAMS_APP_ID ?? "";
-  const appPassword = process.env.TEAMS_APP_PASSWORD ?? "";
-  const port = parseInt(process.env.TEAMS_PORT ?? "3978", 10);
+  const cfg = HubConfigService.fromEnv();
+  const appId = cfg.teamsAppId();
+  const appPassword = cfg.teamsAppPassword();
+  const port = cfg.teamsPort();
 
   if (!appId) throw new Error("TEAMS_APP_ID is required");
   if (!appPassword) throw new Error("TEAMS_APP_PASSWORD is required");

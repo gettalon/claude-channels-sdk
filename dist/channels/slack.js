@@ -4,15 +4,13 @@
  * Uses @slack/bolt App with Socket Mode for inbound. mrkdwn formatting (4000 char limit),
  * Block Kit buttons for permission prompts, extra tools: slack_react, slack_thread, slack_upload.
  */
-// NOTE: This legacy channel adapter reads process.env directly.
-// Sanctioned exception: migration to HubConfigService is deferred until
-// the adapter is brought into the active monorepo architecture.
-// See REMAINING_FIXES.md §1 for context.
 import { ChannelServer } from "../channel-server.js";
+import { HubConfigService } from "@gettalon/hub-runtime";
 export function parseConfig() {
-    const botToken = process.env.SLACK_BOT_TOKEN ?? "";
-    const appToken = process.env.SLACK_APP_TOKEN ?? "";
-    const signingSecret = process.env.SLACK_SIGNING_SECRET ?? "";
+    const cfg = HubConfigService.fromEnv();
+    const botToken = cfg.slackBotToken();
+    const appToken = cfg.slackAppToken();
+    const signingSecret = cfg.slackSigningSecret();
     if (!botToken)
         throw new Error("SLACK_BOT_TOKEN is required");
     if (!appToken)

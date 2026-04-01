@@ -5,13 +5,9 @@
  * quick reply buttons for permission prompts.
  */
 
-// NOTE: This legacy channel adapter reads process.env directly.
-// Sanctioned exception: migration to HubConfigService is deferred until
-// the adapter is brought into the active monorepo architecture.
-// See REMAINING_FIXES.md §1 for context.
-
 import { ChannelServer } from "../channel-server.js";
 import type { ChannelServerOptions, ChannelPermissionRequest } from "../types.js";
+import { HubConfigService } from "@gettalon/hub-runtime";
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
@@ -22,9 +18,10 @@ export interface LineConfig {
 }
 
 export function parseConfig(): LineConfig {
-  const channelAccessToken = process.env.LINE_CHANNEL_ACCESS_TOKEN ?? "";
-  const channelSecret = process.env.LINE_CHANNEL_SECRET ?? "";
-  const webhookPort = parseInt(process.env.LINE_WEBHOOK_PORT ?? "3000", 10);
+  const cfg = HubConfigService.fromEnv();
+  const channelAccessToken = cfg.lineChannelAccessToken();
+  const channelSecret = cfg.lineChannelSecret();
+  const webhookPort = cfg.lineWebhookPort();
 
   if (!channelAccessToken) throw new Error("LINE_CHANNEL_ACCESS_TOKEN is required");
   if (!channelSecret) throw new Error("LINE_CHANNEL_SECRET is required");

@@ -5,13 +5,9 @@
  * text-based permission prompts (reply YES/NO).
  */
 
-// NOTE: This legacy channel adapter reads process.env directly.
-// Sanctioned exception: migration to HubConfigService is deferred until
-// the adapter is brought into the active monorepo architecture.
-// See REMAINING_FIXES.md §1 for context.
-
 import { ChannelServer } from "../channel-server.js";
 import type { ChannelPermissionRequest } from "../types.js";
+import { HubConfigService } from "@gettalon/hub-runtime";
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
@@ -25,15 +21,13 @@ export interface IrcConfig {
 }
 
 export function parseConfig(): IrcConfig {
-  const server = process.env.IRC_SERVER ?? "";
-  const port = parseInt(process.env.IRC_PORT ?? "6667", 10);
-  const nick = process.env.IRC_NICK ?? "";
-  const channels = (process.env.IRC_CHANNELS ?? "")
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
-  const password = process.env.IRC_PASSWORD;
-  const tls = process.env.IRC_TLS === "true";
+  const cfg = HubConfigService.fromEnv();
+  const server = cfg.ircServer();
+  const port = cfg.ircPort();
+  const nick = cfg.ircNick();
+  const channels = cfg.ircChannels();
+  const password = cfg.ircPassword();
+  const tls = cfg.ircTls();
 
   if (!server) throw new Error("IRC_SERVER is required");
   if (!nick) throw new Error("IRC_NICK is required");

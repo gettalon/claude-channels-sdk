@@ -2,11 +2,12 @@
 // installClient() runs after hub.ts fully evaluates.
 import { randomAgentName, ensureMachineId } from "./hub.js";
 import { transportRequiresE2E } from "./protocol.js";
+import { HubConfigService } from "@gettalon/hub-runtime";
 /** Install client connection methods onto the ChannelHub prototype. */
 export function installClient(Hub) {
     Hub.prototype.connect = async function (url, agentName, connectionConfig) {
         await ensureMachineId();
-        const name = agentName ?? this.opts.agentName ?? process.env.TALON_AGENT_NAME ?? this.name ?? randomAgentName();
+        const name = agentName ?? this.opts.agentName ?? HubConfigService.fromEnv().envAgentName ?? this.name ?? randomAgentName();
         // Also check if a resolved form of this URL is already connected
         // (prevents auto://, ws://localhost, unix:// duplicates to the same hub)
         const port = this.extractPort?.(url);
@@ -84,7 +85,7 @@ export function installClient(Hub) {
             transportConfig = { ...transportConfig, ...connectionConfig };
         }
         if (actualTransport === "telegram" && !transportConfig.botToken) {
-            transportConfig.botToken = process.env.TELEGRAM_BOT_TOKEN;
+            transportConfig.botToken = HubConfigService.fromEnv().telegramBotToken();
         }
         const adapter = createChannel(actualTransport, transportConfig);
         const transport = await adapter.connect(resolvedUrl, (msg) => {

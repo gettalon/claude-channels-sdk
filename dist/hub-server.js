@@ -172,7 +172,7 @@ export function installServer(Hub) {
             res.writeHead(404);
             res.end("not found");
         });
-        const bindHost = host ?? this.opts?.host ?? "0.0.0.0";
+        const bindHost = host ?? this.opts?.host ?? "127.0.0.1";
         await new Promise((resolve, reject) => { httpServer.on("error", reject); httpServer.listen(p, bindHost, resolve); });
         const wss = new WebSocketServer({ server: httpServer });
         wss.on("connection", (ws, req) => this.setupAgentConnection(ws, req.socket.remoteAddress ?? "unknown"));

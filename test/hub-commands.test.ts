@@ -22,7 +22,7 @@ import {
   saveTalonSettings,
 } from "../dist/hub-commands.js";
 import type { CommandDef, CommandResult } from "../dist/hub-commands.js";
-import { createTestHub, nextPort, connectRawAgent, delay } from "./helpers.js";
+import { createTestHub, nextPort, connectRawAgent, delay, startTestServer } from "./helpers.js";
 import { createTelegramTransport } from "../dist/transports/telegram.js";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -164,7 +164,7 @@ describe("Hub Commands — Built-in /status", () => {
   beforeEach(async () => {
     port = nextPort();
     hub = createTestHub({ port });
-    await hub.startServer(port);
+    await startTestServer(hub, port);
   });
 
   afterEach(async () => {
@@ -184,6 +184,7 @@ describe("Hub Commands — Built-in /status", () => {
   it("/status includes hub name", async () => {
     const namedHub = createTestHub({ name: "my-test-hub", port: nextPort() });
     await namedHub.startServer(namedHub.defaultPort);
+    await startTestServer(namedHub.defaultPort);
     const result = await namedHub.executeCommand("/status");
     expect(result!.text).toContain("my-test-hub");
     for (const [, s] of namedHub.servers) try { s.httpServer?.close(); } catch {}
@@ -194,7 +195,7 @@ describe("Hub Commands — Built-in /agents", () => {
   it("/agents with no agents reports none", async () => {
     const port = nextPort();
     const hub = createTestHub({ port, name: "agents-test" });
-    await hub.startServer(port);
+    await startTestServer(hub, port);
     try {
       const result = await hub.executeCommand("/agents");
       expect(result).not.toBeNull();
@@ -208,7 +209,7 @@ describe("Hub Commands — Built-in /agents", () => {
   it("/agents lists connected agents", async () => {
     const port = nextPort();
     const hub = createTestHub({ port, name: "agents-list-test" });
-    await hub.startServer(port);
+    await startTestServer(hub, port);
     try {
       const agent = await connectRawAgent(port, "test-agent-alpha", [
         { name: "echo", description: "Echo back", inputSchema: { type: "object", properties: {} } },

@@ -8,7 +8,7 @@
  * health, reload, settings, persistent agent routing.
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { createTestHub, nextPort, delay, waitForEvent } from "./helpers.js";
+import { createTestHub, nextPort, delay, waitForEvent } , startTestServer , startTestServer from "./helpers.js";
 import type { ChannelHub } from "../dist/index.js";
 
 let server: ChannelHub;
@@ -19,7 +19,7 @@ describe("SDK End-to-End", () => {
   beforeEach(async () => {
     port = nextPort();
     server = createTestHub({ name: "e2e-server", port });
-    await server.startServer(port);
+    await startTestServer(server, port);
 
     client = createTestHub({ name: "e2e-client", port, agentName: "sdk-client" });
     await client.connect(`ws://localhost:${port}`, "sdk-client");

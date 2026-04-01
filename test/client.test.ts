@@ -5,7 +5,7 @@
  * proxy commands (groups, handover), state sync.
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { createTestHub, nextPort, delay, waitForEvent } from "./helpers.js";
+import { createTestHub, nextPort, delay, waitForEvent, startTestServer } from "./helpers.js";
 import type { ChannelHub } from "../dist/index.js";
 
 let serverHub: ChannelHub;
@@ -16,7 +16,7 @@ describe("ChannelHub Client Mode", () => {
   beforeEach(async () => {
     port = nextPort();
     serverHub = createTestHub({ name: "server-hub", port });
-    await serverHub.startServer(port);
+    await startTestServer(serverHub, port);
 
     clientHub = createTestHub({ name: "client-hub", port, agentName: "test-client" });
     await clientHub.connect(`ws://localhost:${port}`, "test-client");

@@ -14,19 +14,14 @@
  * - Graceful fallback when SIP blocks chat.db access
  * - Extra tools: imessage_send, imessage_contacts, imessage_history
  */
-// NOTE: This legacy channel adapter reads process.env directly.
-// Sanctioned exception: migration to HubConfigService is deferred until
-// the adapter is brought into the active monorepo architecture.
-// See REMAINING_FIXES.md §1 for context.
 import { ChannelServer } from "../channel-server.js";
+import { HubConfigService } from "@gettalon/hub-runtime";
 // ── Parse Config ──────────────────────────────────────────────────────────────
 export function parseConfig() {
-    const pollInterval = parseInt(process.env.IMESSAGE_POLL_INTERVAL ?? "5000", 10);
-    const allowedContacts = process.env.IMESSAGE_ALLOWED_CONTACTS
-        ?.split(",")
-        .map((s) => s.trim())
-        .filter(Boolean);
-    const chatDbPath = process.env.IMESSAGE_CHAT_DB_PATH;
+    const cfg = HubConfigService.fromEnv();
+    const pollInterval = cfg.imessagePollInterval();
+    const allowedContacts = cfg.imessageAllowedContacts();
+    const chatDbPath = cfg.imessageChatDbPath();
     return {
         pollInterval,
         allowedContacts,

@@ -39,6 +39,13 @@ export function createTestHub(overrides: Partial<HubOptions> & { settingsDir?: s
   return hub;
 }
 
+/** Start a test server with HTTP+WS enabled. */
+export async function startTestServer(hub: ChannelHub, port: number): Promise<{ port: number }> {
+  const result = await hub.startServer(port, { http: true });
+  await waitForPort(port);
+  return result;
+}
+
 /** Wait for a specific event on a hub, with timeout. */
 export function waitForEvent(hub: ChannelHub, event: string, timeoutMs = 5000): Promise<any> {
   return new Promise((resolve, reject) => {
@@ -53,6 +60,40 @@ export function waitForEvent(hub: ChannelHub, event: string, timeoutMs = 5000): 
 /** Small delay helper. */
 export function delay(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
+}
+
+/** Wait for a TCP port to be accepting connections, with retry. */
+export async function waitForPort(port: number, host: string = "127.0.0.1", timeoutMs = 5000): Promise<void> {
+  const startTime = Date.now();
+  const net = await import("node:net");
+
+  while (Date.now() - startTime < timeoutMs) {
+    const connected = await new Promise<boolean>((resolve) => {
+      const socket = new net.Socket();
+      const timer = setTimeout(() => {
+        socket.destroy();
+        resolve(false);
+      }, 200); // per-attempt timeout
+
+      socket.once("connect", () => {
+        clearTimeout(timer);
+        socket.destroy();
+        resolve(true);
+      });
+      socket.once("error", () => {
+        clearTimeout(timer);
+        socket.destroy();
+        resolve(false);
+      });
+      socket.connect(port, host);
+    });
+
+    if (connected) return;
+
+    // Wait before retrying
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  throw new Error(`Port ${host}:${port} not accepting connections after ${timeoutMs}ms`);
 }
 
 /** Connect a raw WebSocket client to a hub server. Returns the ws and helpers. */

@@ -7,7 +7,7 @@
  * 3. msg.target falls through to routeChat when targeting the hub name
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { createTestHub, nextPort, delay } from "./helpers.js";
+import { createTestHub, nextPort, delay, startTestServer } from "./helpers.js";
 import type { ChannelHub } from "../dist/index.js";
 
 let serverHub: ChannelHub;
@@ -20,7 +20,7 @@ describe("Hub discovery", () => {
     port = nextPort();
     wsUrl = `ws://localhost:${port}`;
     serverHub = createTestHub({ name: "my-hub", port });
-    await serverHub.startServer(port, { http: true });
+    await startTestServer(serverHub, port);
     clientHub = createTestHub({ name: "client-hub", port, agentName: "remote-client", preferLocalIpc: false });
   });
 

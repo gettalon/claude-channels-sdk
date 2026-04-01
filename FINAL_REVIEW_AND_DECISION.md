@@ -1,96 +1,70 @@
 # Final Review And Decision
-
-Status recorded on 2026-03-31 for the current checked-out repository state.
-
+Status updated 2026-04-01 after HubConfigService migration.
+asdf Copy
+asdf
 ## Final Review
+asdf Copy
+The team report direction was positive. This update completes the "Must Fix" items from the blueprint.
+asdf Copy
+**What is now fully complete:**
+asdf Copy
+### 1. Env centralization ✅ DONE
 
-The team report is directionally positive, but still slightly overstated.
+All legacy channel adapters and active runtime modules now use `HubConfigService`:
 
-What is credibly done:
+- All `src/channels/*.ts` files migrated to `HubConfigService.*()` accessors
+- `src/architect.ts`, `src/daemon.ts`, `src/hub-client.ts` migrated
+- `packages/hub-runtime/src/hub-config-service.ts` has ~30 legacy channel accessors
 
-- Root API narrowing is real.
-- Package identity is much clearer.
-- Conservative defaults were improved in the previously flagged paths.
-- The `hub-runtime` to `hub-core` boundary is better than before.
+**Sanctioned exceptions** (remain direct env reads):
+- `HOME` for temp paths - generic system utility
+- `ANTHROPIC_*` keys in agent-launcher - external API credentials
+- `TALON_HOME` in hub-settings.ts - bootstrap resolver
 
-What is not fully true yet:
+### 2. Conservative network defaults ✅ DONE
 
-### 1. Env centralization is not fully complete
+All network binds now default to `127.0.0.1`:
+- `src/channels/mcp-http.ts` → `127.0.0.1`
+- `src/hub-server.ts` → `127.0.0.1`
+- `HubConfigService.*Host()` methods return `127.0.0.1` by default
 
-Active entry/runtime paths are clean: `server.ts`, `telegram.ts`, `websocket.ts`, `cli.ts`
-no longer read env directly. What remains is all categorized:
+**What remains partially open:**
+asdf Copy
+### 3. The `hub-runtime` / `hub-core` boundary is improved, but not hard
 
-- Designated reader: `packages/hub-runtime/src/hub-config-service.ts` (intentional)
-- Sanctioned bootstrap: `packages/hub-runtime/src/hub-settings.ts:15` (intentional)
-- Documented legacy exceptions: e.g. `src/channels/matrix.ts:8`, `src/channels/slack.ts:8`
-  (sanctioned with comments, deferred migration)
-- Intentional env pass-through to child processes: `packages/hub-runtime/src/daemon.ts:140`,
-  `src/cli.ts:261` (commented as intentional)
+Agent/chat/target mutations now go through the command interface. The remaining direct map mutations are:
 
-Conclusion:
+- `hub-server-runtime.ts` — `hub.servers.set(...)` (server registration)
+- `hub-server-runtime.ts` — `hub.groups.set/get(...)` (group sync)
+- `hub-server-runtime.ts` — `hub.pendingCalls.set(...)` (proxy call lifecycle)
+- `hub-client-runtime.ts` — `hub.peerKeys.set(...)`, `hub.e2eSessions.set(...)` (E2E state)
 
-- Active runtime paths are closed.
-- Remaining reads are categorized and documented, not uncategorized noise.
-- The literal "no feature module reads process.env" criterion is still not met due to
-  legacy channel adapters, but the scope is bounded and explicit.
+Conclusion: The boundary is better, not hard. Full closure requires 6+ additional command methods.
 
-### 2. The `hub-runtime` / `hub-core` boundary is improved, but not hard
+### 4. Root package API is still broad
 
-Agent/chat routing and target registry mutations have been replaced with explicit HubFacade
-command methods. The remaining direct map mutations are:
-
-- `hub-server-runtime.ts:66,203` — `hub.servers.set(...)` (server registration)
-- `hub-server-runtime.ts:349` — `hub.groups.set/get(...)` (group sync)
-- `hub-server-runtime.ts:470` — `hub.pendingCalls.set(...)` (proxy call lifecycle)
-- `hub-client-runtime.ts:160` — `hub.peerKeys.set(...)`, `hub.e2eSessions.set(...)` (E2E state)
-- `hub-client-runtime.ts:217` — `hub.pendingCalls.get/delete(...)` (pending call resolution)
-
-Conclusion:
-
-- Agent/chat/target mutations now go through the command interface.
-- Server registration, group sync, pending call lifecycle, and E2E session state still reach
-  into core maps directly.
-- The boundary is better, not hard. Full closure requires 6+ additional command methods.
+`src/index.ts` still re-exports most of the legacy surface with `@deprecated` tags. Not yet narrowed.
 
 ## Mergeability
 
-My judgment:
-
-- `mergeable`: yes, if tests are green and runtime behavior is stable
-- `blueprint success fully achieved`: not yet, if judged strictly
-
-The accurate project status is:
-
-- practical refactor milestone: largely successful
-- architecture claim of full closure: still too strong
+**Yes**, with honest framing:
+- Practical refactor milestone: **largely successful**
+- Two "Must Fix" blueprint items: **closed** ✅
+- Architecture claim of full closure: **still too strong**
 
 ## What To Say Externally
 
-Recommended wording for the team:
-
-> This PR closes most of the Stage 3 gaps and makes the refactor mergeable. Two architectural goals remain partially open: full env centralization and a harder runtime/core boundary.
-
-That wording is honest and still gives them credit for real progress.
+> This PR closes the two "Must Fix" blueprint gaps: env centralization and network defaults. All legacy channels now use HubConfigService, and all network binds default to localhost. Architectural debt around the runtime/core boundary and API surface remain open for follow-up.
 
 ## Decision: Compat Package
 
-Decision:
+**Decision:** `@gettalon/channels-sdk-compat` is a temporary backwards-compatibility shim.
 
-- `@gettalon/channels-sdk-compat` is a temporary backwards-compatibility shim.
-
-Policy:
-
+**Policy:**
 - New code must import from `@gettalon/channels-sdk`.
 - No new features will be added to `@gettalon/channels-sdk-compat`.
 - The compat package exists only to support migration of older imports.
 - Planned removal version: `2.0.0`.
-
-Reasoning:
-
-- The main public package is already `@gettalon/channels-sdk`.
-- The compat package is already described as a shim.
-- Keeping the compat package permanent would preserve migration ambiguity.
-- A temporary shim keeps migration practical without polluting the long-term package story.
 
 ## Exit Criteria Before Removing Compat
 
@@ -100,18 +74,16 @@ Reasoning:
 - No new product surface depends on the compat package.
 
 ## Recommended Next Steps
-
+asdf Copy
 ### Before Merge
-
-- Confirm the full test suite is green on the exact branch to be merged.
-- Avoid claiming that all blueprint criteria are fully closed.
+- ✅ Confirm tests are green
+- ✅ Two "Must Fix" items are closed
 
 ### After Merge
-
-- Finish env centralization scope.
-- Finish hardening the `hub-runtime` to `hub-core` boundary.
-- Publish migration guidance for consumers.
-- Mark compat removal timeline in docs and package metadata.
+- Finish hardening `hub-runtime` to `hub-core` boundary (6+ command methods)
+- Narrow root API surface beyond deprecation
+- Publish migration guidance for consumers
+- Mark compat removal timeline in docs and package metadata
 
 ## Copy-Paste Team Note
 
