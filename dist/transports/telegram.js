@@ -316,8 +316,34 @@ class TelegramTransport {
         const silentTypes = ["heartbeat", "heartbeat_ack", "ack", "register", "register_ack", "stream_start", "stream_chunk", "stream_end"];
         if (silentTypes.includes(msg.type))
             return;
-        // Other protocol messages (tool_call, tool_result, etc.): send as JSON
-        await this.sendText(JSON.stringify(message));
+        // Format tool_call and tool_result for nice display in Telegram
+        if (msg.type === "tool_call") {
+            const argsPreview = Object.entries(msg.args || {})
+                .map(([k, v]) => `${k}: ${JSON.stringify(v).slice(0, 50)}`)
+                .join("\n  ");
+            const argsStr = argsPreview.length > 0 ? `\n${argsPreview}` : "";
+            await this.sendText(`🔧 Tool Call: ${msg.tool_name}${argsStr}`);
+        }
+        else if (msg.type === "tool_result") {
+            let resultPreview;
+            if (msg.result) {
+                if (typeof msg.result === "string") {
+                    resultPreview = msg.result.slice(0, 200);
+                }
+                else {
+                    const json = JSON.stringify(msg.result, null, 2);
+                    resultPreview = json.length > 200 ? json.slice(0, 200) + "..." : json;
+                }
+            }
+            else {
+                resultPreview = "...";
+            }
+            await this.sendText(`✅ Tool Result: ${msg.tool_name ?? "unknown"}\n${resultPreview}`);
+        }
+        else {
+            // Other protocol messages: send as JSON
+            await this.sendText(JSON.stringify(message));
+        }
     }
     /** Pick the correct Telegram send method based on MIME type and filename */
     pickSendMethod(mime, name) {
