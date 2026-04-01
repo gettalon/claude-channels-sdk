@@ -129,7 +129,7 @@ class TelegramTransport {
     _connected = true;
     /** Cohere API key for voice transcription (STT) */
     cohereApiKey;
-    /** Pending tool calls awaiting results */
+    /** Pending tool calls awaiting results (stores message_id for editing) */
     pendingToolCalls = new Map();
     constructor(token, chatId, onMessage) {
         this.token = token;
@@ -318,35 +318,45 @@ class TelegramTransport {
         const silentTypes = ["heartbeat", "heartbeat_ack", "ack", "register", "register_ack", "stream_start", "stream_chunk", "stream_end"];
         if (silentTypes.includes(msg.type))
             return;
-        // Store tool_call and combine with tool_result into single message
+        // Send tool_call msg immediately, then edit it when result arrives
         if (msg.type === "tool_call") {
             const callId = String(msg.call_id ?? msg.tool_name ?? `call-${Date.now()}`);
             const argsPreview = Object.entries(msg.args || {})
                 .map(([k, v]) => `${k}: ${JSON.stringify(v).slice(0, 50)}`)
                 .join("\n  ");
             const argsStr = argsPreview.length > 0 ? `\n${argsPreview}` : "";
-            // Store pending tool call (don't send yet)
+            // Send pending message with ⏳ spinner
+            const pendingText = `🔧 Tool: ${msg.tool_name ?? "unknown"}${argsStr}\n⏳ Running...`;
+            const result = await tgCall(this.token, "sendMessage", {
+                chat_id: this.chatId,
+                text: pendingText,
+            });
+            // Store message_id for editing later
             this.pendingToolCalls.set(callId, {
                 tool_name: msg.tool_name ?? "unknown",
                 argsPreview: argsStr,
                 timestamp: Date.now(),
+                messageId: result.message_id,
             });
-            return; // Wait for result
+            return;
         }
         if (msg.type === "tool_result") {
             const callId = String(msg.call_id ?? "");
             const pending = this.pendingToolCalls.get(callId);
             if (pending) {
-                // Found matching tool call - send combined message
+                // Found matching tool call - EDIT original message
                 this.pendingToolCalls.delete(callId);
                 const durationMs = Date.now() - pending.timestamp;
                 const durationStr = durationMs < 1000
                     ? `${durationMs}ms`
                     : `${(durationMs / 1000).toFixed(1)}s`;
                 let resultPreview;
-                if (msg.result) {
+                if (msg.error) {
+                    resultPreview = `❌ Error: ${msg.error}`;
+                }
+                else if (msg.result) {
                     if (typeof msg.result === "string") {
-                        resultPreview = msg.result.slice(0, 200);
+                        resultPreview = msg.result.length > 200 ? msg.result.slice(0, 200) + "..." : msg.result;
                     }
                     else {
                         const json = JSON.stringify(msg.result, null, 2);
@@ -356,8 +366,9 @@ class TelegramTransport {
                 else {
                     resultPreview = "...";
                 }
-                const header = `🔧 Tool: ${pending.tool_name}${pending.argsPreview}\n⏱ ${durationStr}`;
-                await this.sendText(header + resultPreview);
+                // Edit the original message with result
+                const finalText = `🔧 Tool: ${pending.tool_name}${pending.argsPreview}\n⏱ ${durationStr}\n\n${resultPreview}`;
+                await this.editMessage(pending.messageId, finalText);
                 return;
             }
             // No matching tool call - send as separate messages
